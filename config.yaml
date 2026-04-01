@@ -1,0 +1,26 @@
+# Hockey Live API – Configuration
+# ---------------------------------
+# Copy this file to config.yaml and edit to suit your team.
+
+# The exact team name as it appears on stats.swehockey.se.
+# Use GET /teams to list all team names in your configured seasons.
+team: "Färjestad BK"
+
+# List of season IDs from stats.swehockey.se.
+# The ID appears in the Schedule URL:
+#   https://stats.swehockey.se/ScheduleAndResults/Schedule/<ID>
+#
+# Common IDs (add the ones relevant for your team):
+#
+#   SHL 2025/26 regular season : 18263
+#   SHL 2025/26 playoffs       : 19791
+#   HockeyAllsvenskan 2025/26  : 18266
+#   HockeyAllsvenskan playoffs : 19979
+#
+# Include BOTH regular season AND playoffs so the API always has the full picture.
+season_ids:
+  - 18263   # SHL 2025/26 – grundserie
+  - 19791   # SHL 2025/26 – SM-slutspel
+
+# HTTP port the API listens on (default: 8080)
+port: 8080

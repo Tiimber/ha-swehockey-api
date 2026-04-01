@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HockeyLive – Säsongsider",
+        "description": "Ange ID:n för de säsonger du vill följa (kommaseparerade).\nSHL 2024/25 grundserie: 18263, SM-slutspel: 19791",
+        "data": {
+          "season_ids": "Säsongs-ID:n"
+        }
+      },
+      "pick_team": {
+        "title": "HockeyLive – Välj lag",
+        "description": "Hittade {team_count} lag i säsong(erna) {season_ids}.",
+        "data": {
+          "team": "Lag"
+        }
+      }
+    },
+    "error": {
+      "invalid_season_ids": "Ogiltiga säsongs-ID:n – ange heltal separerade med komma.",
+      "no_teams_found":     "Hittade inga lag. Kontrollera att ID:na är korrekta.",
+      "cannot_connect":     "Kunde inte ansluta till swehockey.se. Försök igen."
+    },
+    "abort": {
+      "already_configured": "Det här laget är redan konfigurerat med samma säsonger."
+    }
+  }
+}

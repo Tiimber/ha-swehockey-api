@@ -1,0 +1,146 @@
+# ============================================================
+# Home Assistant – REST sensor configuration for HockeyLive API
+# ============================================================
+#
+# Add these blocks to your configuration.yaml
+# (or split into separate files if you use the packages/split method).
+#
+# Replace IP_OR_HOSTNAME with the address of your Pi/server.
+# Default port is 8080.
+#
+# The /status endpoint returns a consistent JSON body even when no game
+# is live, so all sensors below stay valid at all times.
+# ============================================================
+
+rest:
+  # ── Pull the combined status every 60 seconds ──────────────────────────
+  - resource: http://IP_OR_HOSTNAME:8080/status
+    scan_interval: 60
+    sensor:
+      # Is a game currently live?
+      - name: "Färjestad Live"
+        unique_id: farjestad_is_live
+        value_template: "{{ value_json.live.is_playing }}"
+        json_attributes_path: "$.live"
+        json_attributes:
+          - is_playing
+          - period
+          - period_label
+          - period_clock
+          - home_team
+          - away_team
+          - home_score
+          - away_score
+          - venue
+          - is_overtime
+          - is_shootout
+
+      # Current / live score as a string "H–A"
+      - name: "Färjestad Live Score"
+        unique_id: farjestad_live_score
+        value_template: >-
+          {% if value_json.live.is_playing %}
+            {{ value_json.live.home_score }}–{{ value_json.live.away_score }}
+          {% else %}
+            –
+          {% endif %}
+
+      # Next upcoming match
+      - name: "Färjestad Next Match"
+        unique_id: farjestad_next_match
+        value_template: >-
+          {% set g = value_json.next_match %}
+          {% if g %}
+            {{ g.date }} {{ g.time }} – {{ g.opponent }}
+          {% else %}
+            Inga kommande matcher
+          {% endif %}
+        json_attributes_path: "$.next_match"
+        json_attributes:
+          - date
+          - time
+          - datetime_iso
+          - home_team
+          - away_team
+          - opponent
+          - is_home_game
+          - venue
+          - round
+
+      # Last completed match result
+      - name: "Färjestad Last Match"
+        unique_id: farjestad_last_match
+        value_template: >-
+          {% set g = value_json.last_match %}
+          {% if g %}
+            {{ g.date }}: {{ g.home_team }} {{ g.home_score }}–{{ g.away_score }} {{ g.away_team }}
+          {% else %}
+            –
+          {% endif %}
+        json_attributes_path: "$.last_match"
+        json_attributes:
+          - date
+          - home_team
+          - away_team
+          - home_score
+          - away_score
+          - score_for
+          - score_against
+          - won
+          - period_scores
+          - venue
+
+
+# ============================================================
+# Template sensors – derived information for dashboards
+# ============================================================
+
+template:
+  - sensor:
+      - name: "Färjestad Period"
+        unique_id: farjestad_period_label
+        state: >-
+          {% set live = states['sensor.farjestad_live'] %}
+          {% if live.attributes.is_playing %}
+            {{ live.attributes.period_label }}
+            {%- if live.attributes.period_clock %}
+              ({{ live.attributes.period_clock }})
+            {%- endif %}
+          {% else %}
+            Ingen pågående match
+          {% endif %}
+
+      - name: "Färjestad Next Match Days Away"
+        unique_id: farjestad_days_away
+        unit_of_measurement: "dagar"
+        state: >-
+          {% set dt = state_attr('sensor.farjestad_next_match', 'datetime_iso') %}
+          {% if dt %}
+            {{ ((as_datetime(dt) - now()) / timedelta(days=1)) | round(0) }}
+          {% else %}
+            unknown
+          {% endif %}
+
+
+# ============================================================
+# Example automation – notify when HV71 scores
+# ============================================================
+#
+# automation:
+#   - alias: "Färjestad mål"
+#     trigger:
+#       - platform: state
+#         entity_id: sensor.farjestad_live_score
+#     condition:
+#       - condition: template
+#         value_template: "{{ states('sensor.farjestad_live') == 'True' }}"
+#     action:
+#       - service: notify.mobile_app_your_phone
+#         data:
+#           title: "Färjestad – Mål!"
+#           message: >
+#             {{ state_attr('sensor.farjestad_live', 'home_team') }}
+#             {{ state_attr('sensor.farjestad_live', 'home_score') }} –
+#             {{ state_attr('sensor.farjestad_live', 'away_score') }}
+#             {{ state_attr('sensor.farjestad_live', 'away_team') }}
+#             ({{ state_attr('sensor.farjestad_period', 'period_label') }})

@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HockeyLive – Season IDs",
+        "description": "Enter the season IDs you want to follow (comma-separated).\nSHL 2024/25 regular season: 18263, Playoffs: 19791",
+        "data": {
+          "season_ids": "Season IDs"
+        }
+      },
+      "pick_team": {
+        "title": "HockeyLive – Pick team",
+        "description": "Found {team_count} teams in season(s) {season_ids}.",
+        "data": {
+          "team": "Team"
+        }
+      }
+    },
+    "error": {
+      "invalid_season_ids": "Invalid season IDs – enter integers separated by commas.",
+      "no_teams_found":     "No teams found. Check that the IDs are correct.",
+      "cannot_connect":     "Could not connect to swehockey.se. Please try again."
+    },
+    "abort": {
+      "already_configured": "This team is already configured with the same seasons."
+    }
+  }
+}
