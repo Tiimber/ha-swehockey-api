@@ -345,14 +345,11 @@ curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homea
 curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/Dockerfile \
   -o /addons/hockeylive/Dockerfile
 
-curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/build.yaml \
-  -o /addons/hockeylive/build.yaml
-
-# Verify — you should see exactly these three files:
+# Verify — you should see exactly these two files:
 ls /addons/hockeylive/
 ```
 
-Expected output: `build.yaml  config.yaml  Dockerfile`
+Expected output: `config.yaml  Dockerfile`
 
 > **Private repo:** Replace the raw URLs with authenticated ones:
 > `https://<your-token>@raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/...`

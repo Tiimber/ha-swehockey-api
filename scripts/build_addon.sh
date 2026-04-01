@@ -31,7 +31,6 @@ mkdir -p "$TARGET"
 echo "Copying add-on files..."
 cp "$REPO_ROOT/homeassistant/addon/config.yaml"       "$TARGET/"
 cp "$REPO_ROOT/homeassistant/addon/Dockerfile"         "$TARGET/"
-cp "$REPO_ROOT/homeassistant/addon/build.yaml"         "$TARGET/"
 cp "$REPO_ROOT/homeassistant/addon/run.sh"             "$TARGET/"
 cp "$REPO_ROOT/homeassistant/addon/generate_config.py" "$TARGET/"
 

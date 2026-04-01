@@ -5,10 +5,9 @@
 # The HA Supervisor only includes config.yaml and this Dockerfile in the
 # Docker build context — all other source code is downloaded from GitHub
 # at build time. The repo must be public (or supply a token in REPO_URL).
-# Base image is set per-architecture via build.yaml.
+# python:3.12-slim is a multi-arch image and pulls the correct variant (aarch64) automatically.
 
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
+FROM python:3.12-slim
 
 LABEL \
   io.hass.name="HockeyLive API" \
