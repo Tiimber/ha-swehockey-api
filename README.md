@@ -330,13 +330,38 @@ Det här add-onet ger dig ett skal direkt i HA-webbläsaren, och används för a
 
 ### Steg 2 – Kopiera add-on-filerna till HA Green
 
-Kör följande i terminalen (antingen via webbläsaren eller ssh från din PC). Byt ut `<repo-url>` mot URL:en till det här repot.
+GitHub no longer accepts passwords for `git clone`. Choose one of these methods:
+
+**Option A – Public repo (no auth needed)**  
+If the repo is public, clone directly:
+```bash
+# In the SSH terminal:
+cd /addons
+git clone https://github.com/Tiimber/ha-swehockey-api/ hockeylive-src
+```
+
+**Option B – Private repo with Personal Access Token**  
+1. GitHub → your profile → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**
+2. Set repository access to this repo, Permissions → Contents = **Read-only** → Generate
+3. Copy the token (shown once only), then:
+```bash
+# In the SSH terminal:
+cd /addons
+git clone https://Tiimber:<your-token>@github.com/Tiimber/ha-swehockey-api/ hockeylive-src
+```
+
+**Option C – Download as zip (no git, works for public repos)**
+```bash
+# In the SSH terminal:
+mkdir -p /addons/hockeylive-src
+curl -sL https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/main.tar.gz \
+  | tar -xz --strip-components=1 -C /addons/hockeylive-src
+```
+
+Once you have the source (via any option above), copy the add-on files:
 
 ```bash
-# In the SSH terminal (browser or ssh root@<ha-ip>):
 cd /addons
-git clone <repo-url> hockeylive-src
-
 mkdir -p hockeylive
 cp hockeylive-src/homeassistant/addon/config.yaml       hockeylive/
 cp hockeylive-src/homeassistant/addon/Dockerfile         hockeylive/
@@ -349,7 +374,7 @@ cp hockeylive-src/app.py \
    hockeylive-src/requirements.txt \
    hockeylive/
 
-# Verify the directory looks right:
+# Verify:
 ls /addons/hockeylive/
 ```
 
@@ -521,7 +546,7 @@ entities:
 
 ### Uppdatera add-onet
 
-Vid ny version av koden:
+Vid ny version av koden (om du klonade med Option A/B):
 
 ```bash
 # In the SSH terminal:
@@ -530,8 +555,7 @@ git pull
 cp app.py scraper.py config.py watchlist.py ../hockeylive/
 ```
 
-Gå sedan till **Settings → Add-ons → HockeyLive API → ⋮ → Restart**.  
-`watchlist.json` (dina bevakningar) sparas i `/data/` och berörs inte av uppdateringen.
+Om du använde Option C (zip-nedladdning), kör bara om curl-kommandot i Steg 2 och kopiera filerna igen.
 
 ---
 

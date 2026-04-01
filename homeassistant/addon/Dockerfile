@@ -22,12 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Python dependencies
+# Python dependencies — copy first so this layer is cached independently
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App source files (placed here by scripts/build_addon.sh)
-COPY app.py scraper.py config.py watchlist.py generate_config.py run.sh ./
+# All remaining files in the add-on directory (app.py, scraper.py, etc.)
+COPY . ./
 RUN chmod +x run.sh
 
 # Data directory is mounted by the Supervisor at /data
