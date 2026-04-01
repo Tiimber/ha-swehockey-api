@@ -303,156 +303,127 @@ Under en pågående match returnerar `/live`-endpointerna (och `/status`) utöka
 
 ## Home Assistant Green (och HAOS generellt)
 
-HA Green kör Home Assistant OS (HAOS). Du **kan inte** starta godtyckliga processer direkt i skalet – allt körs som supervisade add-ons. Det finns två alternativ:
-
-| | **Alternativ A – Custom integration** | **Alternativ B – Lokal add-on** |
-|---|---|---|
-| Vad du får | HA-entiteter (sensorer) direkt | Hela REST API:et med watchlist, search, ID:n |
-| Extra server | Nej – pratar direkt med swehockey.se | Nej – körs som add-on på HA Green |
-| Kräver | Fil-åtkomst till HA-config | Fil-åtkomst + Add-on Store-reload |
-| Bäst om | Du bara vill ha HA-sensorer | Du vill använda `/watch`, `/search` etc. |
+HA Green kör Home Assistant OS (HAOS). Du kan inte starta godtyckliga processer direkt i skalet – allt körs som supervisade add-ons. Guiden nedan installerar HockeyLive API som ett **lokalt add-on** via SSH & Web Terminal. Du får hela REST API:et med watchlist, search och watch-IDs, samt HA-sensorer via REST-integration.
 
 ---
 
-### Förutsättningar (båda alternativen)
+### Steg 1 – Installera SSH & Web Terminal
 
-Du behöver fil-åtkomst till HA Green. Installera **ett** av:
+Det här add-onet ger dig ett skal direkt i HA-webbläsaren, och används för att kopiera filer och hantera add-ons.
 
-- **Samba share** – monterar HA:s filsystem på din PC som en nätverksdelning (`\\<ha-ip>\`)
-- **SSH & Web Terminal** – ger dig ett shall direkt i webbläsaren (eller via `ssh root@<ha-ip>`)
-- **Studio Code Server** – VSCode i webbläsaren med full fil-åtkomst
-
-Installeras via: **Inställningar → Tillägg → Lägg till tillägg → sök på respektive namn**
-
----
-
-### Alternativ A – Custom Integration (enklest)
-
-Integrationen kommunicerar direkt med swehockey.se och skapar HA-entiteter. Ingen separat server behövs.
-
-#### Installation
-
-**Alternativ A1 – Via HACS (rekommenderat)**
-
-1. Installera [HACS](https://hacs.xyz/docs/setup/download/) om du inte redan har det
-2. HACS → **Integrationer → ⋮ → Custom repositories**
-3. Lägg till repo-URL:en, välj typ **Integration** → Lägg till
-4. Sök på **HockeyLive** → Installera
-5. Starta om HA: **Inställningar → System → Starta om**
-
-**Alternativ A2 – Manuell kopia (Samba)**
-
-1. Montera Samba-delningen på din PC: `\\<ha-ip>\config`
-2. Skapa mappen `custom_components\hockeylive` om den inte finns
-3. Kopiera innehållet från `custom_components/hockeylive/` i det här repot dit
-4. Starta om HA
-
-**Alternativ A2b – Manuell kopia (SSH)**
-
-```bash
-# Kör på din PC (repo måste vara klonat lokalt)
-scp -r custom_components/hockeylive root@<ha-ip>:/config/custom_components/
-```
-
-Starta sedan om HA.
-
-#### Konfigurera i UI
-
-1. **Inställningar → Enheter & tjänster → Lägg till integration**
-2. Sök på **HockeyLive**
-3. **Steg 1** – Ange säsongs-ID:n (kommaseparerade):
+1. In HA: **Settings → Add-ons → Add-on Store** (bottom right: blue button)
+2. Search for **SSH & Web Terminal** → click it → **Install**
+3. Go to the **Configuration** tab before starting. Set a password (or paste a public key under `authorized_keys`):
+   ```yaml
+   ssh:
+     username: root
+     password: "your-password-here"
+     authorized_keys: []
+     sftp: false
    ```
-   18263, 19791
-   ```
-4. **Steg 2** – Välj lag ur listan → **Slutför**
+4. **Save** → go to the **Info** tab → toggle **Show in sidebar** → **Start**
+5. Click **Terminal** in the sidebar – you now have a root shell on HA Green
 
-Varje lag är en egen config entry. Upprepa för fler lag.
-
-#### Entiteter per lag
-
-| Entitet | Typ | Exempelvärde |
-|---|---|---|
-| `sensor.<lag>_nasta_match` | Sensor | `2026-04-05T19:00:00+02:00` |
-| `sensor.<lag>_senaste_resultat` | Sensor | `3–1` |
-| `sensor.<lag>_live_score` | Sensor | `2–1` |
-| `sensor.<lag>_period` | Sensor | `Period 2` |
-| `binary_sensor.<lag>_spelar_nu` | Binary sensor | `on` / `off` |
+> **Tip:** You can also SSH from your PC: `ssh root@<ha-ip>` (default port 22). Find your HA Green's IP under **Settings → System → Network**.
 
 ---
 
-### Alternativ B – Lokal Add-on (full REST API)
+### Steg 2 – Kopiera add-on-filerna till HA Green
 
-Paketerar FastAPI-servern som en supervisad Docker-container på HA Green. Ger tillgång till hela REST API:et med watchlist, search, watch-ID:n m.m.
-
-#### Bygg add-on-katalogen (på din PC)
+Kör följande i terminalen (antingen via webbläsaren eller ssh från din PC). Byt ut `<repo-url>` mot URL:en till det här repot.
 
 ```bash
-git clone <repo> hockeylive-api
-cd hockeylive-api
-./scripts/build_addon.sh      # skapar /tmp/hockeylive-addon/
-```
-
-#### Kopiera till HA Green
-
-**Via Samba:**
-
-1. Montera `\\<ha-ip>\addons` på din PC
-2. Skapa mappen `hockeylive` där
-3. Kopiera allt från `/tmp/hockeylive-addon/` dit
-
-**Via SCP:**
-
-```bash
-scp -r /tmp/hockeylive-addon/ root@<ha-ip>:/addons/hockeylive
-```
-
-**Via SSH direkt på HA:**
-
-```bash
-# I SSH & Web Terminal-shallet på HA Green:
+# In the SSH terminal (browser or ssh root@<ha-ip>):
 cd /addons
-git clone <repo> hockeylive-src
+git clone <repo-url> hockeylive-src
+
 mkdir -p hockeylive
-cp hockeylive-src/homeassistant/addon/config.yaml    hockeylive/
-cp hockeylive-src/homeassistant/addon/Dockerfile      hockeylive/
-cp hockeylive-src/homeassistant/addon/run.sh          hockeylive/
+cp hockeylive-src/homeassistant/addon/config.yaml       hockeylive/
+cp hockeylive-src/homeassistant/addon/Dockerfile         hockeylive/
+cp hockeylive-src/homeassistant/addon/run.sh             hockeylive/
 cp hockeylive-src/homeassistant/addon/generate_config.py hockeylive/
-cp hockeylive-src/app.py hockeylive-src/scraper.py \
-   hockeylive-src/config.py hockeylive-src/watchlist.py \
-   hockeylive-src/requirements.txt hockeylive/
+cp hockeylive-src/app.py \
+   hockeylive-src/scraper.py \
+   hockeylive-src/config.py \
+   hockeylive-src/watchlist.py \
+   hockeylive-src/requirements.txt \
+   hockeylive/
+
+# Verify the directory looks right:
+ls /addons/hockeylive/
 ```
 
-#### Installera add-on i HA
+Du ska se: `config.yaml  Dockerfile  run.sh  generate_config.py  app.py  scraper.py  config.py  watchlist.py  requirements.txt`
 
-1. **Inställningar → Tillägg → Tilläggsbutik → ⋮ → Sök efter uppdateringar**
-2. Scrolla ner – **HockeyLive API** dyker upp under *Lokala tillägg*
-3. Klicka på det → **Installera** (tar några minuter, Python + lxml byggs)
-4. Gå till **Konfiguration**-fliken:
-   ```
+---
+
+### Steg 3 – Installera add-onet i HA
+
+1. **Settings → Add-ons → Add-on Store → ⋮ (three dots, top right) → Check for updates**
+2. Scroll down to **Local add-ons** – **HockeyLive API** appears there
+3. Click it → **Install** (takes a few minutes – Python and lxml are compiled for aarch64)
+4. When done, go to the **Configuration** tab and set your team and season IDs:
+   ```yaml
    team: "HV 71"
    season_ids:
      - 18263
      - 19791
    ```
-5. **Starta**
+5. **Save** → **Info** tab → **Start**
+6. Check the **Log** tab to confirm it started – you should see:
+   ```
+   INFO:     Application startup complete.
+   INFO:     Uvicorn running on http://0.0.0.0:8080
+   ```
 
 API:et är nu nåbart på `http://<ha-ip>:8080`.  
 Öppna `http://<ha-ip>:8080/docs` för interaktiv dokumentation.
 
-#### Konfigurera REST-sensorer i HA
+---
 
-Lägg till laget som en bevakning via API:et, ta upp watch-ID:t, och använd det i `configuration.yaml`:
+### Steg 4 – Lägg till ett lag i watchlist och hämta dess ID
+
+Öppna terminalen igen (SSH & Web Terminal):
 
 ```bash
-# Från din PC eller SSH-terminalen:
-curl -X POST http://<ha-ip>:8080/watch \
+# Add a watch entry and get its ID:
+curl -s -X POST http://localhost:8080/watch \
   -H "Content-Type: application/json" \
-  -d '{"team": "HV 71", "season_ids": [18263, 19791]}'
-# Notera "id" i svaret, t.ex. "a1b2c3d4"
+  -d '{"team": "HV 71", "season_ids": [18263, 19791]}' | python3 -m json.tool
 ```
 
+Svaret ser ut så här – notera `"id"`:
+
+```json
+{
+  "id": "a1b2c3d4",
+  "team": "HV 71",
+  "season_ids": [18263, 19791],
+  "created": true
+}
+```
+
+Testa att endpointen fungerar:
+
+```bash
+curl -s http://localhost:8080/watch/a1b2c3d4/status | python3 -m json.tool
+```
+
+---
+
+### Steg 5 – Konfigurera REST-sensorer i HA
+
+Redigera `/config/configuration.yaml` – enklast via **File Editor** add-onet eller SSH-terminalen:
+
+```bash
+# In the SSH terminal:
+vi /config/configuration.yaml
+# (or: nano /config/configuration.yaml)
+```
+
+Lägg till (byt `a1b2c3d4` mot ditt faktiska watch-ID):
+
 ```yaml
-# configuration.yaml
 rest:
   - resource: http://localhost:8080/watch/a1b2c3d4/status
     scan_interval: 30
@@ -461,10 +432,10 @@ rest:
         unique_id: hv71_status
         value_template: >-
           {% if value_json.live.is_playing %}
-            Spelar – {{ value_json.live.period_label }}
+            Playing – {{ value_json.live.period_label }}
           {% elif value_json.next_match %}
-            Nästa: {{ value_json.next_match.datetime_iso[:10] }}
-          {% else %}Ingen match planerad{% endif %}
+            Next: {{ value_json.next_match.datetime_iso[:10] }}
+          {% else %}No match scheduled{% endif %}
         json_attributes_path: "$"
         json_attributes: [live, next_match, last_match]
 
@@ -480,7 +451,7 @@ rest:
         value_template: >-
           {{ value_json.live.period_label if value_json.live.is_playing else '–' }}
 
-      - name: "HV71 Senaste mål"
+      - name: "HV71 Last Goal"
         unique_id: hv71_last_goal
         value_template: >-
           {% set g = value_json.live.last_goal %}
@@ -496,14 +467,14 @@ rest:
           - away_score_after
           - secs_since
 
-      - name: "HV71 Nästa match"
+      - name: "HV71 Next Match"
         unique_id: hv71_next_match
         value_template: >-
           {{ value_json.next_match.datetime_iso[:16].replace('T',' ') if value_json.next_match else '–' }}
         json_attributes_path: "$.next_match"
         json_attributes: [opponent, venue, is_home_game, home_team, away_team]
 
-      - name: "HV71 Senaste resultat"
+      - name: "HV71 Last Result"
         unique_id: hv71_last_result
         value_template: >-
           {% set m = value_json.last_match %}
@@ -514,34 +485,53 @@ rest:
 binary_sensor:
   - platform: rest
     resource: http://localhost:8080/watch/a1b2c3d4/status
-    name: "HV71 Spelar nu"
+    name: "HV71 Playing Now"
     unique_id: hv71_is_live
     value_template: "{{ value_json.live.is_playing }}"
     scan_interval: 30
     device_class: running
 ```
 
-> **Tips:** Använd `http://localhost:8080` (inte HA-IP:n) när add-on och HA körs på samma enhet – det är snabbare och fungerar även om DHCP-IP:n ändras.
+Ladda om konfigurationen: **Settings → System → Restart → Quick reload** (or full restart).  
+Kontrollera att sensorerna dykt upp under **Settings → Devices & Services → Entities**.
 
-#### Lovelace-kort
+> **Tip:** Use `http://localhost:8080` (not the HA IP) – it works even if your DHCP address changes and avoids the external network hop.
+
+---
+
+### Dashboard-kort
 
 ```yaml
 type: entities
 title: HV 71
 entities:
-  - entity: binary_sensor.hv71_spelar_nu
-    name: Spelar nu
+  - entity: binary_sensor.hv71_playing_now
+    name: Playing now
   - entity: sensor.hv71_live_score
-    name: Ställning
+    name: Score
   - entity: sensor.hv71_period
     name: Period
-  - entity: sensor.hv71_senaste_mal
-    name: Senaste mål
-  - entity: sensor.hv71_nasta_match
-    name: Nästa match
-  - entity: sensor.hv71_senaste_resultat
-    name: Senaste resultat
+  - entity: sensor.hv71_last_goal
+    name: Last goal
+  - entity: sensor.hv71_next_match
+    name: Next match
+  - entity: sensor.hv71_last_result
+    name: Last result
 ```
+
+### Uppdatera add-onet
+
+Vid ny version av koden:
+
+```bash
+# In the SSH terminal:
+cd /addons/hockeylive-src
+git pull
+cp app.py scraper.py config.py watchlist.py ../hockeylive/
+```
+
+Gå sedan till **Settings → Add-ons → HockeyLive API → ⋮ → Restart**.  
+`watchlist.json` (dina bevakningar) sparas i `/data/` och berörs inte av uppdateringen.
 
 ---
 
