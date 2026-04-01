@@ -24,7 +24,7 @@ WORKDIR /app
 
 # Download source from GitHub at build time.
 # Bump io.hass.version above to bust the Docker layer cache on new releases.
-ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/main.tar.gz
+ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN curl -fsSL "${REPO_URL}" \
     | tar -xz --strip-components=1 \
     && pip3 install --no-cache-dir -r requirements.txt \
