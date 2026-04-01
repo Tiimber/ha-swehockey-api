@@ -345,11 +345,14 @@ curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homea
 curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/Dockerfile \
   -o /addons/hockeylive/Dockerfile
 
-# Verify — you should see exactly these two files:
+curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/DOCS.md \
+  -o /addons/hockeylive/DOCS.md
+
+# Verify — you should see exactly these three files:
 ls /addons/hockeylive/
 ```
 
-Expected output: `config.yaml  Dockerfile`
+Expected output: `config.yaml  Dockerfile  DOCS.md`
 
 > **Private repo:** Replace the raw URLs with authenticated ones:
 > `https://<your-token>@raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/...`
@@ -523,11 +526,13 @@ entities:
 
 ### Uppdatera add-onet
 
-Re-download the Dockerfile (which embeds the version label) to bust Docker's layer cache, then rebuild:
+Re-download the manifest files to pick up the latest version, then rebuild:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/Dockerfile \
   -o /addons/hockeylive/Dockerfile
+curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/DOCS.md \
+  -o /addons/hockeylive/DOCS.md
 ```
 
 Then **Settings → Add-ons → HockeyLive API → ⋮ → Rebuild**.  
