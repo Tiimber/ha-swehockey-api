@@ -2,12 +2,13 @@
 #
 # Add-on Dockerfile for HockeyLive API.
 #
-# The HA Supervisor builds this image from the assembled add-on directory
-# (created by scripts/build_addon.sh). All app source files must be present
-# in the same directory as this Dockerfile when the image is built.
+# The HA Supervisor only includes config.yaml and this Dockerfile in the
+# Docker build context — all other source code is downloaded from GitHub
+# at build time. The repo must be public (or supply a token in REPO_URL).
+# Base image is set per-architecture via build.yaml.
 
-ARG BUILD_FROM=python:3.12-slim
-FROM $BUILD_FROM
+ARG BUILD_FROM
+FROM ${BUILD_FROM}
 
 LABEL \
   io.hass.name="HockeyLive API" \
@@ -15,23 +16,24 @@ LABEL \
   io.hass.version="2.0.0" \
   io.hass.arch="aarch64|amd64|armv7"
 
-# System deps required by lxml
+# System deps: libxml2/libxslt for lxml, curl for source download
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libxml2 libxslt1.1 \
+        libxml2 libxslt1.1 curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Python dependencies — copy first so this layer is cached independently
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Download source from GitHub at build time.
+# Bump io.hass.version above to bust the Docker layer cache on new releases.
+ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/main.tar.gz
+RUN curl -fsSL "${REPO_URL}" \
+    | tar -xz --strip-components=1 \
+    && pip3 install --no-cache-dir -r requirements.txt \
+    && cp homeassistant/addon/run.sh homeassistant/addon/generate_config.py /app/ \
+    && chmod +x /app/run.sh \
+    && rm -rf homeassistant/ custom_components/ scripts/
 
-# All remaining files in the add-on directory (app.py, scraper.py, etc.)
-COPY . ./
-RUN chmod +x run.sh
-
-# Data directory is mounted by the Supervisor at /data
-# config.yaml and watchlist.json are generated/persisted there.
+# /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
 
 EXPOSE 8080

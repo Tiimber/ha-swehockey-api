@@ -1,0 +1,7 @@
+---
+# Specifies the Python-enabled HA base image per architecture.
+# The Supervisor substitutes BUILD_FROM in the Dockerfile with these values.
+build_from:
+  aarch64: ghcr.io/home-assistant/aarch64-base-python:3.12
+  amd64: ghcr.io/home-assistant/amd64-base-python:3.12
+  armv7: ghcr.io/home-assistant/armv7-base-python:3.12

@@ -328,57 +328,37 @@ Det här add-onet ger dig ett skal direkt i HA-webbläsaren, och används för a
 
 ---
 
-### Steg 2 – Kopiera add-on-filerna till HA Green
+### Steg 2 – Kopiera add-on-manifest till HA Green
 
-GitHub no longer accepts passwords for `git clone`. Choose one of these methods:
+The HA Supervisor only puts `config.yaml` and `Dockerfile` in the Docker build context — all `.py` files you copy alongside them are ignored. The Dockerfile therefore downloads the source code from GitHub **at build time**.
 
-**Option A – Public repo (no auth needed)**  
-If the repo is public, clone directly:
-```bash
-# In the SSH terminal:
-cd /addons
-git clone https://github.com/Tiimber/ha-swehockey-api/ hockeylive-src
-```
+> **Requirement:** The GitHub repo must be **public**. If it's private, see the note at the end of this section.
 
-**Option B – Private repo with Personal Access Token**  
-1. GitHub → your profile → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**
-2. Set repository access to this repo, Permissions → Contents = **Read-only** → Generate
-3. Copy the token (shown once only), then:
-```bash
-# In the SSH terminal:
-cd /addons
-git clone https://Tiimber:<your-token>@github.com/Tiimber/ha-swehockey-api/ hockeylive-src
-```
-
-**Option C – Download as zip (no git, works for public repos)**
-```bash
-# In the SSH terminal:
-mkdir -p /addons/hockeylive-src
-curl -sL https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=1 -C /addons/hockeylive-src
-```
-
-Once you have the source (via any option above), copy the add-on files:
+In the SSH terminal, run these three commands:
 
 ```bash
-cd /addons
-mkdir -p hockeylive
-cp hockeylive-src/homeassistant/addon/config.yaml       hockeylive/
-cp hockeylive-src/homeassistant/addon/Dockerfile         hockeylive/
-cp hockeylive-src/homeassistant/addon/run.sh             hockeylive/
-cp hockeylive-src/homeassistant/addon/generate_config.py hockeylive/
-cp hockeylive-src/app.py \
-   hockeylive-src/scraper.py \
-   hockeylive-src/config.py \
-   hockeylive-src/watchlist.py \
-   hockeylive-src/requirements.txt \
-   hockeylive/
+mkdir -p /addons/hockeylive
 
-# Verify:
+curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/config.yaml \
+  -o /addons/hockeylive/config.yaml
+
+curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/Dockerfile \
+  -o /addons/hockeylive/Dockerfile
+
+curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/build.yaml \
+  -o /addons/hockeylive/build.yaml
+
+# Verify — you should see exactly these three files:
 ls /addons/hockeylive/
 ```
 
-Du ska se: `config.yaml  Dockerfile  run.sh  generate_config.py  app.py  scraper.py  config.py  watchlist.py  requirements.txt`
+Expected output: `build.yaml  config.yaml  Dockerfile`
+
+> **Private repo:** Replace the raw URLs with authenticated ones:
+> `https://<your-token>@raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/...`
+> Or temporarily make the repo public just for installation, then set it back to private.
+
+---
 
 ---
 
@@ -546,16 +526,15 @@ entities:
 
 ### Uppdatera add-onet
 
-Vid ny version av koden (om du klonade med Option A/B):
+Re-download the Dockerfile (which embeds the version label) to bust Docker's layer cache, then rebuild:
 
 ```bash
-# In the SSH terminal:
-cd /addons/hockeylive-src
-git pull
-cp app.py scraper.py config.py watchlist.py ../hockeylive/
+curl -fsSL https://raw.githubusercontent.com/Tiimber/ha-swehockey-api/main/homeassistant/addon/Dockerfile \
+  -o /addons/hockeylive/Dockerfile
 ```
 
-Om du använde Option C (zip-nedladdning), kör bara om curl-kommandot i Steg 2 och kopiera filerna igen.
+Then **Settings → Add-ons → HockeyLive API → ⋮ → Rebuild**.  
+`watchlist.json` in `/data/` is not affected.
 
 ---
 
