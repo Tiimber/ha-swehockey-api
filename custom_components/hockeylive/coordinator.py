@@ -31,15 +31,21 @@ from zoneinfo import ZoneInfo
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, UPDATE_INTERVAL_LIVE, UPDATE_INTERVAL_GAME_DAY, UPDATE_INTERVAL_IDLE, LIVE_WINDOW_SECONDS
+from .const import (
+    DOMAIN,
+    UPDATE_INTERVAL_LIVE,
+    UPDATE_INTERVAL_GAME_DAY,
+    UPDATE_INTERVAL_IDLE,
+    LIVE_WINDOW_SECONDS,
+)
 from . import scraper
 
 _LOGGER = logging.getLogger(__name__)
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 
 # How long a cached schedule page is considered fresh (seconds)
-SCHEDULE_CACHE_TTL_NORMAL = 300   # 5 min
-SCHEDULE_CACHE_TTL_LIVE   = 30    # 30 sec when a game may be in progress
+SCHEDULE_CACHE_TTL_NORMAL = 300  # 5 min
+SCHEDULE_CACHE_TTL_LIVE = 30  # 30 sec when a game may be in progress
 
 
 def _now() -> datetime:
@@ -122,7 +128,7 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         team_lower = self._team.lower()
         is_home = (game["home_team"] or "").lower() == team_lower
         opponent = game["away_team"] if is_home else game["home_team"]
-        score_for     = game["home_score"] if is_home else game["away_score"]
+        score_for = game["home_score"] if is_home else game["away_score"]
         score_against = game["away_score"] if is_home else game["home_score"]
         won: bool | None = None
         if score_for is not None and score_against is not None:
@@ -130,41 +136,56 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         dt_iso = game["datetime"].isoformat() if game["datetime"] else None
         return {
             **game,
-            "datetime": None,           # not JSON-serialisable; use datetime_iso
+            "datetime": None,  # not JSON-serialisable; use datetime_iso
             "datetime_iso": dt_iso,
             "is_home_game": is_home,
-            "opponent":     opponent,
-            "score_for":    score_for,
+            "opponent": opponent,
+            "score_for": score_for,
             "score_against": score_against,
-            "won":          won,
-            "is_live":      self._is_live(game),
+            "won": won,
+            "is_live": self._is_live(game),
         }
 
     def _live_detail(self, game: dict) -> dict:
-        """Fetch period/clock detail for a live game."""
+        """Fetch period/clock/goals/penalties detail for a live game."""
         detail: dict = {
-            "is_playing":   True,
-            "home_team":    game["home_team"],
-            "away_team":    game["away_team"],
-            "home_score":   game["home_score"] or 0,
-            "away_score":   game["away_score"] or 0,
-            "venue":        game["venue"],
-            "period":       None,
+            "is_playing": True,
+            "home_team": game["home_team"],
+            "away_team": game["away_team"],
+            "home_score": game["home_score"] or 0,
+            "away_score": game["away_score"] or 0,
+            "venue": game["venue"],
+            "period": None,
             "period_label": None,
             "period_clock": None,
-            "is_overtime":  False,
-            "is_shootout":  False,
+            "is_overtime": False,
+            "is_shootout": False,
+            "goals": [],
+            "last_goal": None,
+            "penalties": [],
+            "active_penalties": [],
         }
 
         if game.get("game_id"):
             ev = scraper.fetch_game_events(game["game_id"])
             if ev and ev.get("period"):
-                detail["home_score"]   = ev.get("home_score", detail["home_score"])
-                detail["away_score"]   = ev.get("away_score", detail["away_score"])
-                detail["period"]       = ev["period"]
+                detail["home_score"] = ev.get("home_score", detail["home_score"])
+                detail["away_score"] = ev.get("away_score", detail["away_score"])
+                detail["period"] = ev["period"]
                 detail["period_clock"] = ev.get("period_clock")
-                detail["is_overtime"]  = ev.get("is_overtime", False)
-                detail["is_shootout"]  = ev.get("is_shootout", False)
+                detail["is_overtime"] = ev.get("is_overtime", False)
+                detail["is_shootout"] = ev.get("is_shootout", False)
+                detail["goals"] = ev.get("goals", [])
+                detail["last_goal"] = ev.get("last_goal")
+                detail["penalties"] = ev.get("penalties", [])
+                detail["active_penalties"] = ev.get("active_penalties", [])
+                detail["period_label"] = {
+                    "P1": "Period 1",
+                    "P2": "Period 2",
+                    "P3": "Period 3",
+                    "OT": "Övertid",
+                    "SO": "Straffar",
+                }.get(detail["period"], detail["period"] or "")
                 return detail
 
         # Fallback: estimate period from elapsed real time
@@ -184,12 +205,14 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         else:
             period = "SO"
         detail["period"] = period
-        detail["is_overtime"]  = period == "OT"
-        detail["is_shootout"]  = period == "SO"
-
+        detail["is_overtime"] = period == "OT"
+        detail["is_shootout"] = period == "SO"
         detail["period_label"] = {
-            "P1": "Period 1", "P2": "Period 2", "P3": "Period 3",
-            "OT": "Övertid",  "SO": "Straffar",
+            "P1": "Period 1",
+            "P2": "Period 2",
+            "P3": "Period 3",
+            "OT": "Övertid",
+            "SO": "Straffar",
         }.get(period, period)
 
         return detail
@@ -210,7 +233,9 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         all_games: list[dict] = []
         for sid in self._season_ids:
             if _schedule_cache_stale(self.hass, sid, live_mode):
-                _LOGGER.debug("Fetching schedule for season_id=%s (team=%s)", sid, self._team)
+                _LOGGER.debug(
+                    "Fetching schedule for season_id=%s (team=%s)", sid, self._team
+                )
                 try:
                     games = await self.hass.async_add_executor_job(
                         scraper.fetch_schedule, sid
@@ -220,7 +245,9 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
                 _store_schedule(self.hass, sid, games)
             else:
                 _LOGGER.debug(
-                    "Re-using cached schedule for season_id=%s (team=%s)", sid, self._team
+                    "Re-using cached schedule for season_id=%s (team=%s)",
+                    sid,
+                    self._team,
                 )
 
             all_games.extend(_get_cached_games(self.hass, sid))
@@ -228,8 +255,7 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         # Filter for our team
         team_games = scraper.filter_team_games(all_games, self._team)
         team_games.sort(
-            key=lambda g: g["datetime"]
-            or datetime.max.replace(tzinfo=STOCKHOLM_TZ)
+            key=lambda g: g["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ)
         )
 
         now = _now()
@@ -237,8 +263,7 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         # --- Today's game (for "current" slot) ---
         today = now.date()
         todays_games = [
-            g for g in team_games
-            if g["datetime"] and g["datetime"].date() == today
+            g for g in team_games if g["datetime"] and g["datetime"].date() == today
         ]
         todays_game = todays_games[0] if todays_games else None
 
@@ -250,8 +275,11 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
             )
             period = live_data.get("period", "")
             live_data["period_label"] = {
-                "P1": "Period 1", "P2": "Period 2", "P3": "Period 3",
-                "OT": "Övertid", "SO": "Straffar",
+                "P1": "Period 1",
+                "P2": "Period 2",
+                "P3": "Period 3",
+                "OT": "Övertid",
+                "SO": "Straffar",
             }.get(period, period or "")
         else:
             live_data = {"is_playing": False}
@@ -267,14 +295,17 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         # --- Last ---
         completed = [g for g in team_games if g["is_completed"]]
         last_game = (
-            max(completed, key=lambda g: g["datetime"] or datetime.min.replace(tzinfo=STOCKHOLM_TZ))
-            if completed else None
+            max(
+                completed,
+                key=lambda g: g["datetime"]
+                or datetime.min.replace(tzinfo=STOCKHOLM_TZ),
+            )
+            if completed
+            else None
         )
 
         # --- New season discovery when no future games remain ---
-        has_future = any(
-            g["datetime"] and g["datetime"] > now for g in team_games
-        )
+        has_future = any(g["datetime"] and g["datetime"] > now for g in team_games)
         if not has_future and team_games:
             _LOGGER.info(
                 "%s: no future games found – checking swehockey.se for new seasons",
@@ -287,7 +318,8 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
                 if new_ids:
                     _LOGGER.info(
                         "%s: discovered new season ID(s): %s – add them to your config entry",
-                        self._team, new_ids,
+                        self._team,
+                        new_ids,
                     )
             except Exception as exc:
                 _LOGGER.warning("%s: season discovery failed: %s", self._team, exc)
@@ -302,10 +334,10 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         self.update_interval = timedelta(seconds=interval)
 
         return {
-            "team":        self._team,
-            "live":        live_data,
+            "team": self._team,
+            "live": live_data,
             "todays_game": self._game_extra(todays_game) if todays_game else None,
-            "next_match":  self._game_extra(next_game) if next_game else None,
-            "last_match":  self._game_extra(last_game) if last_game else None,
-            "all_games":   [self._game_extra(g) for g in team_games],
+            "next_match": self._game_extra(next_game) if next_game else None,
+            "last_match": self._game_extra(last_game) if last_game else None,
+            "all_games": [self._game_extra(g) for g in team_games],
         }

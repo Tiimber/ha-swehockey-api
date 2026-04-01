@@ -1,16 +1,32 @@
 """
 app.py – FastAPI mini-API for Swedish ice hockey schedule and live results.
 
-Endpoints
----------
+Existing endpoints (default team from config.yaml)
+---------------------------------------------------
 GET /               API info & configured team
 GET /next           Next (or currently ongoing) match
 GET /last           Last completed match result
 GET /live           Live match data (period, score); 404 if no live game
 GET /status         Combined snapshot – ideal for Home Assistant
+GET /summary        Detailed previous/current/next snapshot
 GET /schedule       Full schedule for the configured team
 GET /teams          All teams found in configured seasons
 GET /refresh        Force cache refresh (admin use)
+
+Watch / team-discovery endpoints
+---------------------------------
+GET  /search?q=...                 Search for a team name across known seasons
+GET  /watches                      List all watched team+season combinations
+POST /watch                        Add a team+season to the watchlist
+DELETE /watch?team=...&season_id=  Remove a team+season from the watchlist
+
+Per-team endpoints (team name URL-encoded in path)
+---------------------------------------------------
+GET /team/{team}/next      Next match for a specific watched team
+GET /team/{team}/last      Last result for a specific watched team
+GET /team/{team}/live      Live game for a specific watched team (404 if none)
+GET /team/{team}/status    Combined status snapshot for a specific watched team
+GET /team/{team}/schedule  Full schedule for a specific watched team
 """
 
 import asyncio
@@ -21,11 +37,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 import config as cfg_module
 import scraper
+import watchlist
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,124 +54,181 @@ logger = logging.getLogger(__name__)
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 
 # ---------------------------------------------------------------------------
-# Cache
+# Per-season cache
+# ---------------------------------------------------------------------------
+# Keyed by season_id; stores ALL games for that season (not filtered by team).
+#
+# _schedule_cache[season_id] = {
+#     "games":      list[dict],
+#     "fetched_at": datetime,
+#     "name":       str | None,   # human-readable name from the page title
+# }
 # ---------------------------------------------------------------------------
 
-_cache: dict = {
-    "games": [],           # merged games from all configured season_ids
-    "fetched_at": None,    # datetime
-}
+_schedule_cache: dict[int, dict] = {}
 
 # Poll intervals (seconds)
-CACHE_TTL_LIVE     = 30     # game in progress
-CACHE_TTL_GAME_DAY = 3600   # game scheduled today, not yet started
-CACHE_TTL_IDLE     = 21600  # no game today (6 hours)
+CACHE_TTL_LIVE = 30  # game in progress
+CACHE_TTL_GAME_DAY = 3600  # game scheduled today, not yet started
+CACHE_TTL_IDLE = 21600  # no game today (6 hours)
 
 
-def _is_today(game: dict) -> bool:
-    """Return True if the game is scheduled for today (Stockholm time)."""
-    dt = game.get("datetime")
-    return bool(dt and dt.date() == datetime.now(STOCKHOLM_TZ).date())
-
-
-def _current_ttl() -> int:
-    """Return the appropriate cache TTL based on today's schedule."""
+def _ttl_for_games(games: list[dict]) -> int:
+    """Return the appropriate cache TTL given a list of games."""
     now = datetime.now(STOCKHOLM_TZ)
-    for g in _cache["games"]:
+    for g in games:
         dt = g.get("datetime")
         if not dt:
             continue
         delta = (now - dt).total_seconds()
         if 0 < delta < 14400 and not g["is_completed"]:
-            return CACHE_TTL_LIVE   # live or potentially live
+            return CACHE_TTL_LIVE
         if dt.date() == now.date():
-            return CACHE_TTL_GAME_DAY  # game today, hasn't started yet
+            return CACHE_TTL_GAME_DAY
     return CACHE_TTL_IDLE
 
 
-def _cache_stale(cfg: dict) -> bool:  # noqa: ARG001
-    fetched = _cache["fetched_at"]
-    if fetched is None:
+def _is_season_stale(season_id: int) -> bool:
+    entry = _schedule_cache.get(season_id)
+    if not entry or not entry["fetched_at"]:
         return True
-    return (datetime.now(STOCKHOLM_TZ) - fetched).total_seconds() > _current_ttl()
+    ttl = _ttl_for_games(entry["games"])
+    return (datetime.now(STOCKHOLM_TZ) - entry["fetched_at"]).total_seconds() > ttl
 
 
-async def _refresh_cache(cfg: dict) -> None:
-    """Fetch all seasons and update the in-memory cache."""
+def _global_ttl() -> int:
+    """Minimum TTL across all cached seasons (drives background loop sleep)."""
+    if not _schedule_cache:
+        return CACHE_TTL_IDLE
+    all_games = [g for entry in _schedule_cache.values() for g in entry["games"]]
+    return _ttl_for_games(all_games)
+
+
+async def _refresh_season(season_id: int) -> None:
+    """Fetch a single season page and update the cache entry."""
     loop = asyncio.get_event_loop()
-    team = cfg["team"]
-    season_ids = cfg["season_ids"]
-
-    all_games: list[dict] = []
-    for sid in season_ids:
-        games = await loop.run_in_executor(
-            None, scraper.fetch_schedule, sid
-        )
-        team_games = scraper.filter_team_games(games, team)
-        all_games.extend(team_games)
-
-    # Sort by datetime (None datetimes go last)
-    all_games.sort(key=lambda g: g["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ))
-
-    _cache["games"] = all_games
-    _cache["fetched_at"] = datetime.now(STOCKHOLM_TZ)
+    info = await loop.run_in_executor(None, scraper.fetch_season_info, season_id)
+    _schedule_cache[season_id] = {
+        "games": info["games"],
+        "fetched_at": datetime.now(STOCKHOLM_TZ),
+        "name": info.get("name"),
+    }
     logger.info(
-        "Cache refreshed: %d games for %s across %d season(s)",
-        len(all_games),
-        team,
-        len(season_ids),
+        "Season %d refreshed: %d games (name=%r)",
+        season_id,
+        len(info["games"]),
+        info.get("name"),
     )
 
 
+async def _ensure_seasons_fresh(season_ids: list[int]) -> None:
+    """Ensure each season in *season_ids* has fresh cached data."""
+    for sid in season_ids:
+        if _is_season_stale(sid):
+            await _refresh_season(sid)
+
+
+def _all_known_season_ids(cfg: dict) -> set[int]:
+    """All season IDs from config plus the watchlist."""
+    return set(cfg["season_ids"]) | watchlist.all_watched_season_ids()
+
+
+def _team_games(team: str, season_ids: list[int]) -> list[dict]:
+    """Return all cached games for *team* across *season_ids*, sorted by datetime."""
+    games: list[dict] = []
+    for sid in season_ids:
+        entry = _schedule_cache.get(sid, {})
+        games.extend(scraper.filter_team_games(entry.get("games", []), team))
+    games.sort(key=lambda g: g["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ))
+    return games
+
+
+def _resolve_season_ids(team: str, cfg: dict) -> list[int]:
+    """
+    Resolve all season_ids for *team* by merging every watchlist entry
+    that matches the team name (case-insensitive).
+    Falls back to config season_ids if it is the config team.
+    Raises HTTPException(404) if the team is not tracked anywhere.
+    """
+    watches = watchlist.find_watches_for_team(team)
+    if watches:
+        ids: set[int] = set()
+        for w in watches:
+            ids.update(w["season_ids"])
+        return sorted(ids)
+    if team.lower() == cfg["team"].lower():
+        return cfg["season_ids"]
+    raise HTTPException(
+        status_code=404,
+        detail=(
+            f"Team '{team}' is not watched. "
+            "Add it with POST /watch or check spelling with GET /search."
+        ),
+    )
+
+
+def _get_watch_or_404(watch_id: str) -> dict:
+    """Return the watch entry dict, or raise HTTPException(404)."""
+    watch = watchlist.get_watch(watch_id)
+    if watch is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Watch ID '{watch_id}' not found. Use GET /watches to list all IDs.",
+        )
+    return watch
+
+
 async def _ensure_fresh(cfg: dict) -> None:
-    if _cache_stale(cfg):
-        await _refresh_cache(cfg)
+    await _ensure_seasons_fresh(cfg["season_ids"])
 
 
 # ---------------------------------------------------------------------------
 # Background auto-refresh
 # ---------------------------------------------------------------------------
 
+
 async def _auto_refresh_loop(cfg: dict) -> None:
     while True:
-        try:
-            await _refresh_cache(cfg)
-        except Exception as exc:
-            logger.error("Auto-refresh error: %s", exc)
+        ttl = _global_ttl()
+        await asyncio.sleep(ttl)
 
-        ttl = _current_ttl()
+        # Refresh all known seasons (config + watchlist may have grown)
+        for sid in list(_all_known_season_ids(cfg)):
+            try:
+                await _refresh_season(sid)
+            except Exception as exc:
+                logger.error("Auto-refresh season %d error: %s", sid, exc)
 
-        # When no future games remain, check swehockey.se for new seasons.
+        # When no future games remain, hint about new seasons
         now = datetime.now(STOCKHOLM_TZ)
-        has_future = any(
-            g["datetime"] and g["datetime"] > now for g in _cache["games"]
-        )
-        if not has_future and _cache["games"]:
+        all_games = [g for e in _schedule_cache.values() for g in e["games"]]
+        has_future = any(g["datetime"] and g["datetime"] > now for g in all_games)
+        if not has_future and all_games:
             loop = asyncio.get_event_loop()
             try:
                 new_ids = await loop.run_in_executor(
-                    None, scraper.discover_new_seasons, cfg["season_ids"]
+                    None, scraper.discover_new_seasons, list(_all_known_season_ids(cfg))
                 )
                 if new_ids:
                     logger.info(
                         "New season ID(s) found on swehockey.se: %s – "
-                        "add them to season_ids in config.yaml",
+                        "add them to season_ids in config.yaml or via POST /watch",
                         new_ids,
                     )
             except Exception as exc:
                 logger.warning("Season discovery failed: %s", exc)
-
-        await asyncio.sleep(ttl)
 
 
 # ---------------------------------------------------------------------------
 # App lifespan
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = cfg_module.get()
-    await _refresh_cache(cfg)
+    for sid in _all_known_season_ids(cfg):
+        await _refresh_season(sid)
     task = asyncio.create_task(_auto_refresh_loop(cfg))
     yield
     task.cancel()
@@ -162,7 +237,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HockeyLive API",
     description="Swedish ice hockey schedule and live results from swehockey.se",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -170,6 +245,7 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _now() -> datetime:
     return datetime.now(STOCKHOLM_TZ)
@@ -229,7 +305,8 @@ def _game_to_dict(game: dict, cfg: dict) -> dict:
 
 def _live_detail(game: dict) -> dict:
     """
-    Fetch game events and build period/score detail for a live game.
+    Fetch game events and build a full live detail dict:
+      period, period_clock, scores, goals, last_goal, penalties, active_penalties.
     Falls back to heuristic period estimation if scraping fails.
     """
     events_data = scraper.fetch_game_events(game["game_id"])
@@ -241,6 +318,10 @@ def _live_detail(game: dict) -> dict:
         period_clock = events_data.get("period_clock")
         is_overtime = events_data.get("is_overtime", False)
         is_shootout = events_data.get("is_shootout", False)
+        goals = events_data.get("goals", [])
+        last_goal = events_data.get("last_goal")
+        penalties = events_data.get("penalties", [])
+        active_penalties = events_data.get("active_penalties", [])
     else:
         # Heuristic: estimate period from elapsed real time
         # Approx intermission-aware breakpoints (minutes after puck drop):
@@ -266,6 +347,10 @@ def _live_detail(game: dict) -> dict:
         period_clock = None
         is_overtime = period == "OT"
         is_shootout = period == "SO"
+        goals = []
+        last_goal = None
+        penalties = []
+        active_penalties = []
 
     # Human-readable period label in Swedish
     period_sv = {
@@ -284,6 +369,10 @@ def _live_detail(game: dict) -> dict:
         "away_score": away_score,
         "is_overtime": is_overtime,
         "is_shootout": is_shootout,
+        "goals": goals,
+        "last_goal": last_goal,
+        "penalties": penalties,
+        "active_penalties": active_penalties,
     }
 
 
@@ -291,19 +380,51 @@ def _live_detail(game: dict) -> dict:
 # Routes
 # ---------------------------------------------------------------------------
 
+
 @app.get("/")
 async def root():
     cfg = cfg_module.get()
+    watches = watchlist.get_watches()
     return {
         "api": "HockeyLive API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "team": cfg["team"],
         "season_ids": cfg["season_ids"],
         "source": "stats.swehockey.se",
-        "endpoints": ["/next", "/last", "/live", "/status", "/schedule", "/teams", "/refresh"],
-        "cache_fetched_at": (
-            _cache["fetched_at"].isoformat() if _cache["fetched_at"] else None
-        ),
+        "endpoints": [
+            "/next",
+            "/last",
+            "/live",
+            "/status",
+            "/summary",
+            "/schedule",
+            "/teams",
+            "/refresh",
+            "/search",
+            "/watches",
+            "/watch",
+            "/watch/{id}/status",
+            "/watch/{id}/next",
+            "/watch/{id}/last",
+            "/watch/{id}/live",
+            "/watch/{id}/schedule",
+            "/team/{team}/next",
+            "/team/{team}/last",
+            "/team/{team}/live",
+            "/team/{team}/status",
+            "/team/{team}/schedule",
+        ],
+        "watched_teams": list(watches.keys()),
+        "cached_seasons": {
+            str(sid): {
+                "name": entry.get("name"),
+                "games": len(entry.get("games", [])),
+                "fetched_at": entry["fetched_at"].isoformat()
+                if entry.get("fetched_at")
+                else None,
+            }
+            for sid, entry in _schedule_cache.items()
+        },
     }
 
 
@@ -314,7 +435,7 @@ async def next_match():
     await _ensure_fresh(cfg)
 
     now = _now()
-    games = _cache["games"]
+    games = _team_games(cfg["team"], cfg["season_ids"])
 
     # First check for a live game
     for g in games:
@@ -322,7 +443,9 @@ async def next_match():
             return {"status": "live", "game": _game_to_dict(g, cfg)}
 
     # Then find the next upcoming game (datetime in the future)
-    for g in sorted(games, key=lambda x: x["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ)):
+    for g in sorted(
+        games, key=lambda x: x["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ)
+    ):
         if g["datetime"] and g["datetime"] > now and not g["is_completed"]:
             return {"status": "upcoming", "game": _game_to_dict(g, cfg)}
 
@@ -335,7 +458,9 @@ async def last_match():
     cfg = cfg_module.get()
     await _ensure_fresh(cfg)
 
-    completed = [g for g in _cache["games"] if g["is_completed"]]
+    completed = [
+        g for g in _team_games(cfg["team"], cfg["season_ids"]) if g["is_completed"]
+    ]
     if not completed:
         raise HTTPException(status_code=404, detail="No completed matches found.")
 
@@ -355,7 +480,7 @@ async def live_match():
     cfg = cfg_module.get()
     await _ensure_fresh(cfg)
 
-    for g in _cache["games"]:
+    for g in _team_games(cfg["team"], cfg["season_ids"]):
         if _is_live(g):
             base = _game_to_dict(g, cfg)
             detail = _live_detail(g)
@@ -363,7 +488,10 @@ async def live_match():
 
     return JSONResponse(
         status_code=404,
-        content={"status": "no_live_game", "detail": "No match is currently in progress."},
+        content={
+            "status": "no_live_game",
+            "detail": "No match is currently in progress.",
+        },
     )
 
 
@@ -377,7 +505,7 @@ async def status():
     await _ensure_fresh(cfg)
 
     team = cfg["team"]
-    games = _cache["games"]
+    games = _team_games(team, cfg["season_ids"])
     now = _now()
 
     # --- live ---
@@ -392,7 +520,10 @@ async def status():
     # --- next ---
     next_game = None
     if not live_game:
-        for g in sorted(games, key=lambda x: x["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ)):
+        for g in sorted(
+            games,
+            key=lambda x: x["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ),
+        ):
             if g["datetime"] and g["datetime"] > now and not g["is_completed"]:
                 next_game = g
                 break
@@ -403,7 +534,10 @@ async def status():
     # --- last ---
     completed = [g for g in games if g["is_completed"]]
     last_game = (
-        max(completed, key=lambda g: g["datetime"] or datetime.min.replace(tzinfo=STOCKHOLM_TZ))
+        max(
+            completed,
+            key=lambda g: g["datetime"] or datetime.min.replace(tzinfo=STOCKHOLM_TZ),
+        )
         if completed
         else None
     )
@@ -437,7 +571,7 @@ async def summary():
     await _ensure_fresh(cfg)
 
     team = cfg["team"]
-    games = _cache["games"]
+    games = _team_games(team, cfg["season_ids"])
     now = _now()
     today = now.date()
 
@@ -446,45 +580,52 @@ async def summary():
     # Partition today's games: promoted to current once within 2 h of start.
     today_games = [g for g in games if g["datetime"] and g["datetime"].date() == today]
     today_as_current = [
-        g for g in today_games
+        g
+        for g in today_games
         if (g["datetime"] - now).total_seconds() <= PRE_GAME_WINDOW
     ]
     today_as_next = [
-        g for g in today_games
+        g
+        for g in today_games
         if (g["datetime"] - now).total_seconds() > PRE_GAME_WINDOW
         and not g["is_completed"]
     ]
 
     before_today = [
-        g for g in games
+        g
+        for g in games
         if g["datetime"] and g["datetime"].date() < today and g["is_completed"]
     ]
     after_today = [
-        g for g in games
+        g
+        for g in games
         if g["datetime"] and g["datetime"].date() > today and not g["is_completed"]
     ]
 
     # --- previous: last completed game before today ---
     previous_game = (
-        max(before_today, key=lambda g: g["datetime"])
-        if before_today else None
+        max(before_today, key=lambda g: g["datetime"]) if before_today else None
     )
 
     def _prev_dict(g: dict) -> dict:
         d = _game_to_dict(g, cfg)
         return {
-            "home_team":   d["home_team"],
-            "away_team":   d["away_team"],
-            "home_score":  d["home_score"],
-            "away_score":  d["away_score"],
-            "score_for":   d["score_for"],
+            "home_team": d["home_team"],
+            "away_team": d["away_team"],
+            "home_score": d["home_score"],
+            "away_score": d["away_score"],
+            "score_for": d["score_for"],
             "score_against": d["score_against"],
-            "won":         d["won"],
-            "overtime":    bool(g.get("period_scores") and "OT" in (g["period_scores"] or "")),
-            "shootout":    bool(g.get("period_scores") and "SO" in (g["period_scores"] or "")),
-            "datetime":    d["datetime_iso"],
-            "venue":       d["venue"],
-            "round":       d["round"],
+            "won": d["won"],
+            "overtime": bool(
+                g.get("period_scores") and "OT" in (g["period_scores"] or "")
+            ),
+            "shootout": bool(
+                g.get("period_scores") and "SO" in (g["period_scores"] or "")
+            ),
+            "datetime": d["datetime_iso"],
+            "venue": d["venue"],
+            "round": d["round"],
         }
 
     # --- current: today's game if within 2 h (or already started/done) ---
@@ -492,45 +633,51 @@ async def summary():
     if today_as_current:
         tg = today_as_current[0]
         base = _game_to_dict(tg, cfg)
-        started    = tg["datetime"] <= now
+        started = tg["datetime"] <= now
         is_live_now = _is_live(tg)
-        is_done    = tg["is_completed"]
+        is_done = tg["is_completed"]
         won: Optional[bool] = None
-        if is_done and base["score_for"] is not None and base["score_against"] is not None:
+        if (
+            is_done
+            and base["score_for"] is not None
+            and base["score_against"] is not None
+        ):
             won = base["score_for"] > base["score_against"]
 
         current_data = {
-            "home_team":    tg["home_team"],
-            "away_team":    tg["away_team"],
-            "home_score":   tg["home_score"],
-            "away_score":   tg["away_score"],
-            "score_for":    base["score_for"],
+            "home_team": tg["home_team"],
+            "away_team": tg["away_team"],
+            "home_score": tg["home_score"],
+            "away_score": tg["away_score"],
+            "score_for": base["score_for"],
             "score_against": base["score_against"],
-            "started":      started,
-            "is_live":      is_live_now,
+            "started": started,
+            "is_live": is_live_now,
             "is_completed": is_done,
-            "won":          won,
-            "datetime":     base["datetime_iso"],
-            "venue":        base["venue"],
-            "round":        base["round"],
+            "won": won,
+            "datetime": base["datetime_iso"],
+            "venue": base["venue"],
+            "round": base["round"],
             # Live/completed fields (filled below when started)
-            "period":       None,
+            "period": None,
             "period_label": None,
             "period_clock": None,
-            "is_overtime":  False,
-            "is_shootout":  False,
+            "is_overtime": False,
+            "is_shootout": False,
         }
         if is_live_now:
             detail = _live_detail(tg)
-            current_data.update({
-                "home_score":   detail["home_score"],
-                "away_score":   detail["away_score"],
-                "period":       detail["period"],
-                "period_label": detail["period_label"],
-                "period_clock": detail["period_clock"],
-                "is_overtime":  detail["is_overtime"],
-                "is_shootout":  detail["is_shootout"],
-            })
+            current_data.update(
+                {
+                    "home_score": detail["home_score"],
+                    "away_score": detail["away_score"],
+                    "period": detail["period"],
+                    "period_label": detail["period_label"],
+                    "period_clock": detail["period_clock"],
+                    "is_overtime": detail["is_overtime"],
+                    "is_shootout": detail["is_shootout"],
+                }
+            )
 
     # --- next: next future match (tomorrow+, plus today's games still >2 h away) ---
     next_candidates = sorted(
@@ -544,19 +691,19 @@ async def summary():
         return {
             "home_team": d["home_team"],
             "away_team": d["away_team"],
-            "datetime":  d["datetime_iso"],
-            "venue":     d["venue"],
-            "round":     d["round"],
-            "is_home":   d["is_home_game"],
-            "opponent":  d["opponent"],
+            "datetime": d["datetime_iso"],
+            "venue": d["venue"],
+            "round": d["round"],
+            "is_home": d["is_home_game"],
+            "opponent": d["opponent"],
         }
 
     return {
-        "team":       team,
+        "team": team,
         "updated_at": now.isoformat(),
-        "previous":   _prev_dict(previous_game) if previous_game else None,
-        "current":    current_data,
-        "next":       _next_dict(next_game) if next_game else None,
+        "previous": _prev_dict(previous_game) if previous_game else None,
+        "current": current_data,
+        "next": _next_dict(next_game) if next_game else None,
     }
 
 
@@ -565,12 +712,12 @@ async def schedule():
     """Full schedule for the configured team (all seasons)."""
     cfg = cfg_module.get()
     await _ensure_fresh(cfg)
-
+    games = _team_games(cfg["team"], cfg["season_ids"])
     return {
         "team": cfg["team"],
         "season_ids": cfg["season_ids"],
-        "games": [_game_to_dict(g, cfg) for g in _cache["games"]],
-        "total": len(_cache["games"]),
+        "games": [_game_to_dict(g, cfg) for g in games],
+        "total": len(games),
     }
 
 
@@ -581,26 +728,447 @@ async def teams():
     Useful for discovering the exact team name spelling used by swehockey.se.
     """
     cfg = cfg_module.get()
+    await _ensure_fresh(cfg)
     season_ids = cfg["season_ids"]
-    loop = asyncio.get_event_loop()
-
     all_teams: set[str] = set()
     for sid in season_ids:
-        season_teams = await loop.run_in_executor(
-            None, scraper.list_teams_in_season, sid
-        )
-        all_teams.update(season_teams)
-
+        entry = _schedule_cache.get(sid, {})
+        for g in entry.get("games", []):
+            if g.get("home_team"):
+                all_teams.add(g["home_team"])
+            if g.get("away_team"):
+                all_teams.add(g["away_team"])
     return {"season_ids": season_ids, "teams": sorted(all_teams)}
 
 
 @app.get("/refresh")
 async def force_refresh():
-    """Force an immediate cache refresh."""
+    """Force an immediate cache refresh of all known seasons."""
     cfg = cfg_module.get()
-    await _refresh_cache(cfg)
+    season_ids = list(_all_known_season_ids(cfg))
+    for sid in season_ids:
+        await _refresh_season(sid)
     return {
         "ok": True,
-        "games_loaded": len(_cache["games"]),
-        "fetched_at": _cache["fetched_at"].isoformat(),
+        "seasons_refreshed": season_ids,
+        "fetched_at": datetime.now(STOCKHOLM_TZ).isoformat(),
+    }
+
+
+# ===========================================================================
+# Watch / team-discovery endpoints
+# ===========================================================================
+
+
+@app.get("/search")
+async def search_team(
+    q: str = Query(..., description="Team name to search for (partial match)"),
+):
+    """
+    Search for a team name across all known seasons (config + watchlist).
+    Returns a list of {team, season_id, season_name} matches.
+    """
+    cfg = cfg_module.get()
+    season_ids = list(_all_known_season_ids(cfg))
+    await _ensure_seasons_fresh(season_ids)
+
+    q_lower = q.strip().lower()
+    if not q_lower:
+        raise HTTPException(
+            status_code=422, detail="Query parameter 'q' must not be empty."
+        )
+
+    results: list[dict] = []
+    for sid in sorted(season_ids):
+        entry = _schedule_cache.get(sid, {})
+        teams_in_season: set[str] = set()
+        for g in entry.get("games", []):
+            for name in (g.get("home_team"), g.get("away_team")):
+                if name and q_lower in name.lower():
+                    teams_in_season.add(name)
+        for team in sorted(teams_in_season):
+            watched_ids = watchlist.get_season_ids_for_team(team)
+            results.append(
+                {
+                    "team": team,
+                    "season_id": sid,
+                    "season_name": entry.get("name"),
+                    "is_watched": sid in watched_ids,
+                }
+            )
+
+    return {"query": q, "count": len(results), "results": results}
+
+
+@app.get("/watches")
+async def list_watches():
+    """List all watched team+season combinations with their unique IDs."""
+    watches = watchlist.get_watches()
+    items = []
+    for watch_id, w in watches.items():
+        seasons = []
+        for sid in w["season_ids"]:
+            entry = _schedule_cache.get(sid, {})
+            seasons.append(
+                {
+                    "season_id": sid,
+                    "season_name": entry.get("name"),
+                }
+            )
+        items.append(
+            {
+                "id": watch_id,
+                "team": w["team"],
+                "seasons": seasons,
+            }
+        )
+    return {"count": len(items), "watches": items}
+
+
+class WatchRequest(BaseModel):
+    team: str
+    season_ids: list[int]
+
+
+@app.post("/watch", status_code=201)
+async def add_watch(req: WatchRequest):
+    """
+    Add a team + one or more season_ids to the watchlist.
+    All season_ids are validated against swehockey.se before saving.
+
+    The returned ID is deterministic: posting the same team+season_ids
+    combination again returns the same ID with `created=false`.
+
+    Use GET /search?q=... to find the correct team name spelling first.
+    """
+    if not req.season_ids:
+        raise HTTPException(status_code=422, detail="season_ids must not be empty.")
+
+    # Freshen all requested seasons
+    await _ensure_seasons_fresh(req.season_ids)
+
+    # Validate team presence in each season and resolve canonical name
+    canonical: Optional[str] = None
+    for sid in req.season_ids:
+        entry = _schedule_cache.get(sid, {})
+        games = entry.get("games", [])
+        if not games:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Season {sid} not found or contains no games.",
+            )
+        name_map: dict[str, str] = {}
+        for g in games:
+            for name in (g.get("home_team"), g.get("away_team")):
+                if name:
+                    name_map[name.lower()] = name
+        found = name_map.get(req.team.lower())
+        if found is None:
+            close = [v for k, v in name_map.items() if req.team.lower() in k]
+            hint = f" Did you mean one of: {close[:5]}?" if close else ""
+            raise HTTPException(
+                status_code=404,
+                detail=f"Team '{req.team}' not found in season {sid}.{hint}",
+            )
+        # Use the first canonical match; confirm it's consistent across seasons
+        if canonical is None:
+            canonical = found
+        elif canonical != found:
+            # Extremely unlikely, but guard against mismatched spelling
+            canonical = found  # accept later spelling without crashing
+
+    watch_id, created = watchlist.add_watch(canonical, req.season_ids)
+    season_names = [
+        {"season_id": sid, "season_name": _schedule_cache.get(sid, {}).get("name")}
+        for sid in sorted(req.season_ids)
+    ]
+    return {
+        "id": watch_id,
+        "created": created,
+        "team": canonical,
+        "seasons": season_names,
+        "links": {
+            "status": f"/watch/{watch_id}/status",
+            "next": f"/watch/{watch_id}/next",
+            "last": f"/watch/{watch_id}/last",
+            "live": f"/watch/{watch_id}/live",
+            "schedule": f"/watch/{watch_id}/schedule",
+        },
+    }
+
+
+@app.delete("/watch/{watch_id}")
+async def remove_watch(watch_id: str):
+    """Remove a watch entry by its ID (see GET /watches for IDs)."""
+    watch = watchlist.get_watch(watch_id)
+    if watch is None:
+        raise HTTPException(status_code=404, detail=f"Watch ID '{watch_id}' not found.")
+    watchlist.remove_watch(watch_id)
+    return {
+        "removed": True,
+        "id": watch_id,
+        "team": watch["team"],
+        "season_ids": watch["season_ids"],
+    }
+
+
+# ===========================================================================
+# Per-watch-ID endpoints  (/watch/{id}/...)
+# ===========================================================================
+#
+# Use the ID returned by POST /watch (or visible in GET /watches).
+# The ID encodes both the team name and the set of season_ids it covers,
+# so one ID may span SHL + CHL or any other league combination.
+# ===========================================================================
+
+
+def _watch_payload_base(watch: dict, cfg: dict) -> tuple[str, list[int], dict]:
+    """Unpack a watch entry into (team, season_ids, fake_cfg)."""
+    team = watch["team"]
+    season_ids = watch["season_ids"]
+    fake_cfg = {**cfg, "team": team}
+    return team, season_ids, fake_cfg
+
+
+@app.get("/watch/{watch_id}/status")
+async def watch_status(watch_id: str):
+    """Combined status snapshot for a specific watch entry."""
+    cfg = cfg_module.get()
+    watch = _get_watch_or_404(watch_id)
+    team, season_ids, fake_cfg = _watch_payload_base(watch, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    payload = _team_status_payload(team, season_ids, cfg)
+    payload["watch_id"] = watch_id
+    return payload
+
+
+@app.get("/watch/{watch_id}/next")
+async def watch_next(watch_id: str):
+    """Next upcoming or currently ongoing match for a specific watch entry."""
+    cfg = cfg_module.get()
+    watch = _get_watch_or_404(watch_id)
+    team, season_ids, fake_cfg = _watch_payload_base(watch, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    now = _now()
+    games = _team_games(team, season_ids)
+    for g in games:
+        if _is_live(g):
+            return {
+                "watch_id": watch_id,
+                "status": "live",
+                "game": _game_to_dict(g, fake_cfg),
+            }
+    for g in sorted(
+        games, key=lambda x: x["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ)
+    ):
+        if g["datetime"] and g["datetime"] > now and not g["is_completed"]:
+            return {
+                "watch_id": watch_id,
+                "status": "upcoming",
+                "game": _game_to_dict(g, fake_cfg),
+            }
+    raise HTTPException(
+        status_code=404, detail=f"No upcoming match found for watch '{watch_id}'."
+    )
+
+
+@app.get("/watch/{watch_id}/last")
+async def watch_last(watch_id: str):
+    """Most recently completed match for a specific watch entry."""
+    cfg = cfg_module.get()
+    watch = _get_watch_or_404(watch_id)
+    team, season_ids, fake_cfg = _watch_payload_base(watch, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    completed = [g for g in _team_games(team, season_ids) if g["is_completed"]]
+    if not completed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No completed matches found for watch '{watch_id}'.",
+        )
+    last = max(
+        completed,
+        key=lambda g: g["datetime"] or datetime.min.replace(tzinfo=STOCKHOLM_TZ),
+    )
+    return {"watch_id": watch_id, "game": _game_to_dict(last, fake_cfg)}
+
+
+@app.get("/watch/{watch_id}/live")
+async def watch_live(watch_id: str):
+    """Live score and period for a specific watch entry; 404 if no game is live."""
+    cfg = cfg_module.get()
+    watch = _get_watch_or_404(watch_id)
+    team, season_ids, fake_cfg = _watch_payload_base(watch, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    for g in _team_games(team, season_ids):
+        if _is_live(g):
+            base = _game_to_dict(g, fake_cfg)
+            detail = _live_detail(g)
+            return {"watch_id": watch_id, "status": "live", "game": {**base, **detail}}
+    return JSONResponse(
+        status_code=404,
+        content={
+            "status": "no_live_game",
+            "watch_id": watch_id,
+            "detail": "No match is currently in progress.",
+        },
+    )
+
+
+@app.get("/watch/{watch_id}/schedule")
+async def watch_schedule(watch_id: str):
+    """Full schedule for all seasons in a specific watch entry."""
+    cfg = cfg_module.get()
+    watch = _get_watch_or_404(watch_id)
+    team, season_ids, fake_cfg = _watch_payload_base(watch, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    games = _team_games(team, season_ids)
+    return {
+        "watch_id": watch_id,
+        "team": team,
+        "season_ids": season_ids,
+        "games": [_game_to_dict(g, fake_cfg) for g in games],
+        "total": len(games),
+    }
+
+
+# ===========================================================================
+# Per-team endpoints  (/team/{team}/...)
+# ===========================================================================
+#
+# {team} must be URL-encoded (e.g. "HV%2071" for "HV 71").
+# The team must either be in the watchlist or be the config team.
+# Season_ids are merged from ALL watch entries for that team.
+# ===========================================================================
+
+
+def _team_status_payload(team: str, season_ids: list[int], cfg: dict) -> dict:
+    """Build the combined status dict for any team."""
+    # Reuse _game_to_dict with a temporary cfg-like dict so team fields are correct
+    fake_cfg = {**cfg, "team": team}
+    games = _team_games(team, season_ids)
+    now = _now()
+
+    live_game = next((g for g in games if _is_live(g)), None)
+    live_data: dict = {"is_playing": False}
+    if live_game:
+        live_data = {"is_playing": True, **_live_detail(live_game)}
+        live_data["home_team"] = live_game["home_team"]
+        live_data["away_team"] = live_game["away_team"]
+        live_data["venue"] = live_game["venue"]
+
+    next_game = None
+    if not live_game:
+        for g in sorted(
+            games,
+            key=lambda x: x["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ),
+        ):
+            if g["datetime"] and g["datetime"] > now and not g["is_completed"]:
+                next_game = g
+                break
+
+    completed = [g for g in games if g["is_completed"]]
+    last_game = (
+        max(
+            completed,
+            key=lambda g: g["datetime"] or datetime.min.replace(tzinfo=STOCKHOLM_TZ),
+        )
+        if completed
+        else None
+    )
+
+    return {
+        "team": team,
+        "season_ids": season_ids,
+        "updated_at": now.isoformat(),
+        "live": live_data,
+        "next_match": _game_to_dict(next_game, fake_cfg) if next_game else None,
+        "last_match": _game_to_dict(last_game, fake_cfg) if last_game else None,
+    }
+
+
+@app.get("/team/{team}/status")
+async def team_status(team: str):
+    """Combined status snapshot for a watched team."""
+    cfg = cfg_module.get()
+    season_ids = _resolve_season_ids(team, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    return _team_status_payload(team, season_ids, cfg)
+
+
+@app.get("/team/{team}/next")
+async def team_next(team: str):
+    """Next upcoming or currently ongoing match for a watched team."""
+    cfg = cfg_module.get()
+    season_ids = _resolve_season_ids(team, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    fake_cfg = {**cfg, "team": team}
+    now = _now()
+    games = _team_games(team, season_ids)
+
+    for g in games:
+        if _is_live(g):
+            return {"status": "live", "game": _game_to_dict(g, fake_cfg)}
+    for g in sorted(
+        games, key=lambda x: x["datetime"] or datetime.max.replace(tzinfo=STOCKHOLM_TZ)
+    ):
+        if g["datetime"] and g["datetime"] > now and not g["is_completed"]:
+            return {"status": "upcoming", "game": _game_to_dict(g, fake_cfg)}
+    raise HTTPException(
+        status_code=404, detail=f"No upcoming match found for '{team}'."
+    )
+
+
+@app.get("/team/{team}/last")
+async def team_last(team: str):
+    """Most recently completed match for a watched team."""
+    cfg = cfg_module.get()
+    season_ids = _resolve_season_ids(team, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    fake_cfg = {**cfg, "team": team}
+    completed = [g for g in _team_games(team, season_ids) if g["is_completed"]]
+    if not completed:
+        raise HTTPException(
+            status_code=404, detail=f"No completed matches found for '{team}'."
+        )
+    last = max(
+        completed,
+        key=lambda g: g["datetime"] or datetime.min.replace(tzinfo=STOCKHOLM_TZ),
+    )
+    return {"game": _game_to_dict(last, fake_cfg)}
+
+
+@app.get("/team/{team}/live")
+async def team_live(team: str):
+    """Live score and period for a watched team; 404 if no game is live."""
+    cfg = cfg_module.get()
+    season_ids = _resolve_season_ids(team, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    fake_cfg = {**cfg, "team": team}
+    for g in _team_games(team, season_ids):
+        if _is_live(g):
+            base = _game_to_dict(g, fake_cfg)
+            detail = _live_detail(g)
+            return {"status": "live", "game": {**base, **detail}}
+    return JSONResponse(
+        status_code=404,
+        content={
+            "status": "no_live_game",
+            "detail": f"No match is currently in progress for '{team}'.",
+        },
+    )
+
+
+@app.get("/team/{team}/schedule")
+async def team_schedule(team: str):
+    """Full schedule for a watched team across all its watched seasons."""
+    cfg = cfg_module.get()
+    season_ids = _resolve_season_ids(team, cfg)
+    await _ensure_seasons_fresh(season_ids)
+    fake_cfg = {**cfg, "team": team}
+    games = _team_games(team, season_ids)
+    return {
+        "team": team,
+        "season_ids": season_ids,
+        "games": [_game_to_dict(g, fake_cfg) for g in games],
+        "total": len(games),
     }
