@@ -16,7 +16,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py scraper.py config.py ./
+COPY app.py scraper.py config.py watchlist.py ./
 
 # config.yaml is provided at runtime via a bind-mount or volume:
 #   docker run -v $(pwd)/config.yaml:/app/config.yaml ...

@@ -1,0 +1,47 @@
+---
+# Home Assistant Add-on manifest for HockeyLive API
+# Docs: https://developers.home-assistant.io/docs/add-ons/configuration
+
+name: "HockeyLive API"
+version: "2.0.0"
+slug: "hockeylive"
+description: >-
+  Swedish ice hockey live scores, goals, penalties and schedule from
+  stats.swehockey.se. Exposes a REST API with watchlist management –
+  follow multiple teams across SHL, CHL, HockeyAllsvenskan etc.
+url: "https://github.com/robbintapper/hockeylive-api"
+
+arch:
+  - aarch64   # HA Green, Raspberry Pi 4/5
+  - amd64     # x86 servers / VMs
+  - armv7     # Raspberry Pi 3
+
+# Never run the S6 init system – we have our own CMD
+init: false
+
+# Start with HA services so sensors are ready when HA loads
+startup: services
+
+# Expose the API port (host_port: container_port)
+ports:
+  8080/tcp: 8080
+ports_description:
+  8080/tcp: "HockeyLive REST API"
+
+# Add-on options shown in the UI
+options:
+  team: "Färjestad BK"
+  season_ids:
+    - 18263
+    - 19791
+
+schema:
+  team: str
+  season_ids:
+    - int
+
+# Persistent storage – watchlist.json and generated config land here
+map:
+  - type: data
+    path: /data
+    read_only: false
