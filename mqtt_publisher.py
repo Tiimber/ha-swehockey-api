@@ -37,8 +37,10 @@ import json
 import logging
 import re
 import unicodedata
+from datetime import datetime as _datetime
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo as _ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -114,15 +116,36 @@ def _build_state(status_payload: dict) -> dict:
 
     if is_playing:
         status = "live"
-        score = f"{live.get('home_score', 0)}\u20131{live.get('away_score', 0)}"
-        # Use proper en-dash
-        score = f"{live.get('home_score', 0)}–{live.get('away_score', 0)}"
+        score = f"{live.get('home_score', 0)}\u2013{live.get('away_score', 0)}"
     elif next_match:
         status = "upcoming"
-        score = "–"
+        score = "\u2013"
     else:
         status = "idle"
-        score = "–"
+        score = "\u2013"
+
+    # Goal data (only present during live games)
+    goals = live.get("goals", []) if is_playing else []
+    last_goal = live.get("last_goal") if is_playing else None
+
+    # Next match helpers
+    next_dt = next_match.get("datetime_iso") if next_match else None
+    next_today = False
+    next_time = None
+    if next_dt:
+        try:
+            dt = _datetime.fromisoformat(next_dt)
+            now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
+            next_today = dt.date() == now_sthlm.date()
+            next_time = dt.strftime("%H:%M")
+        except Exception:
+            pass
+
+    # Last match OT/SO detection from period_scores string e.g. "(2-0)(1-2)(0-1)(1-0)"
+    last_period_scores = last_match.get("period_scores") if last_match else None
+    last_went_ot = False
+    if last_period_scores:
+        last_went_ot = len(re.findall(r"\(\d+-\d+\)", last_period_scores)) >= 4
 
     return {
         "status": status,
@@ -135,17 +158,35 @@ def _build_state(status_payload: dict) -> dict:
         "period": live.get("period") if is_playing else None,
         "period_label": live.get("period_label") if is_playing else None,
         "period_clock": live.get("period_clock") if is_playing else None,
-        "next_datetime": next_match["datetime_iso"] if next_match else None,
-        "next_opponent": next_match["opponent"] if next_match else None,
-        "next_home_team": next_match["home_team"] if next_match else None,
-        "next_away_team": next_match["away_team"] if next_match else None,
+        "is_overtime": live.get("is_overtime", False) if is_playing else False,
+        "is_shootout": live.get("is_shootout", False) if is_playing else False,
+        # Goal data — changes on every new goal → triggers automations
+        "goals_count": len(goals),
+        "last_goal_scorer": last_goal.get("scorer") if last_goal else None,
+        "last_goal_team": last_goal.get("team") if last_goal else None,
+        "last_goal_assists": last_goal.get("assists", []) if last_goal else [],
+        "last_goal_period": last_goal.get("period") if last_goal else None,
+        "last_goal_clock": last_goal.get("period_clock") if last_goal else None,
+        "last_goal_situation": last_goal.get("situation") if last_goal else None,
+        # Full goals list available as JSON attribute on the status sensor
+        "goals": goals,
+        # Next match
+        "next_datetime": next_dt,
+        "next_today": next_today,
+        "next_time": next_time,
+        "next_opponent": next_match.get("opponent") if next_match else None,
+        "next_home_team": next_match.get("home_team") if next_match else None,
+        "next_away_team": next_match.get("away_team") if next_match else None,
+        # Last match
         "last_score": (
-            f"{last_match['home_score']}–{last_match['away_score']}"
+            f"{last_match['home_score']}\u2013{last_match['away_score']}"
             if last_match and last_match.get("home_score") is not None
             else None
         ),
         "last_opponent": last_match.get("opponent") if last_match else None,
         "last_won": last_match.get("won") if last_match else None,
+        "last_period_scores": last_period_scores,
+        "last_went_ot": last_went_ot,
     }
 
 
@@ -302,7 +343,7 @@ class MQTTPublisher:
 
         # Define all entities for this watch
         entity_defs = [
-            # Main status sensor (also carries JSON attributes for automations)
+            # Main status sensor (also carries ALL JSON attributes for automations)
             (
                 *_base("status"),
                 {
@@ -333,12 +374,12 @@ class MQTTPublisher:
                     "icon": "mdi:scoreboard",
                 },
             ),
-            # Period label  "Period 2"
+            # Period label  "Period 2" / "Övertid" / "Straffar"
             (
                 *_base("period"),
                 {
                     "name": f"{display_name} Period",
-                    "value_template": "{{ value_json.period_label or '\u2013' }}",
+                    "value_template": "{{ value_json.period_label or '-' }}",
                     "icon": "mdi:timer",
                 },
             ),
@@ -350,7 +391,7 @@ class MQTTPublisher:
                     "value_template": (
                         "{% if value_json.next_datetime %}"
                         "{{ value_json.next_datetime[:16] | replace('T', ' ') }}"
-                        "{% else %}\u2013{% endif %}"
+                        "{% else %}-{% endif %}"
                     ),
                     "icon": "mdi:calendar",
                 },
@@ -360,8 +401,40 @@ class MQTTPublisher:
                 *_base("last_result"),
                 {
                     "name": f"{display_name} Last Result",
-                    "value_template": "{{ value_json.last_score or '\u2013' }}",
+                    "value_template": "{{ value_json.last_score or '-' }}",
                     "icon": "mdi:history",
+                },
+            ),
+            # Last goal scorer — changes value on every new goal → ideal automation trigger
+            (
+                *_base("last_goal_scorer"),
+                {
+                    "name": f"{display_name} Last Goal Scorer",
+                    "value_template": "{{ value_json.last_goal_scorer or '-' }}",
+                    "icon": "mdi:hockey-puck",
+                },
+            ),
+            # Total goals in current game — integer that increases with each goal
+            (
+                *_base("goals_count"),
+                {
+                    "name": f"{display_name} Goals",
+                    "value_template": "{{ value_json.goals_count }}",
+                    "icon": "mdi:counter",
+                    "state_class": "measurement",
+                },
+            ),
+            # OT/SO binary sensor
+            (
+                *_base("overtime", "binary_sensor"),
+                {
+                    "name": f"{display_name} Overtime",
+                    "value_template": (
+                        "{{ (value_json.is_overtime or value_json.is_shootout) | lower }}"
+                    ),
+                    "payload_on": "true",
+                    "payload_off": "false",
+                    "icon": "mdi:clock-alert",
                 },
             ),
         ]

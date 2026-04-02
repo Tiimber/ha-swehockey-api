@@ -12,7 +12,7 @@ FROM python:3.12-slim
 LABEL \
   io.hass.name="HockeyLive API" \
   io.hass.description="Swedish ice hockey live scores from swehockey.se" \
-  io.hass.version="2.5.2" \
+  io.hass.version="2.6.0" \
   io.hass.arch="aarch64|amd64|armv7"
 
 # System deps: libxml2/libxslt for lxml, curl for source download
@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_2200
+ARG CACHEBUST=20260402_2300
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -162,8 +162,10 @@ import json
 import logging
 import re
 import unicodedata
+from datetime import datetime as _datetime
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo as _ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -239,8 +241,6 @@ def _build_state(status_payload: dict) -> dict:
 
     if is_playing:
         status = "live"
-        score = f"{live.get('home_score', 0)}\u20131{live.get('away_score', 0)}"
-        # Use proper en-dash
         score = f"{live.get('home_score', 0)}\u2013{live.get('away_score', 0)}"
     elif next_match:
         status = "upcoming"
@@ -248,6 +248,29 @@ def _build_state(status_payload: dict) -> dict:
     else:
         status = "idle"
         score = "\u2013"
+
+    # Goal data (only present during live games)
+    goals = live.get("goals", []) if is_playing else []
+    last_goal = live.get("last_goal") if is_playing else None
+
+    # Next match helpers
+    next_dt = next_match.get("datetime_iso") if next_match else None
+    next_today = False
+    next_time = None
+    if next_dt:
+        try:
+            dt = _datetime.fromisoformat(next_dt)
+            now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
+            next_today = dt.date() == now_sthlm.date()
+            next_time = dt.strftime("%H:%M")
+        except Exception:
+            pass
+
+    # Last match OT/SO detection from period_scores string e.g. "(2-0)(1-2)(0-1)(1-0)"
+    last_period_scores = last_match.get("period_scores") if last_match else None
+    last_went_ot = False
+    if last_period_scores:
+        last_went_ot = len(re.findall(r"\(\d+-\d+\)", last_period_scores)) >= 4
 
     return {
         "status": status,
@@ -260,10 +283,26 @@ def _build_state(status_payload: dict) -> dict:
         "period": live.get("period") if is_playing else None,
         "period_label": live.get("period_label") if is_playing else None,
         "period_clock": live.get("period_clock") if is_playing else None,
-        "next_datetime": next_match["datetime_iso"] if next_match else None,
-        "next_opponent": next_match["opponent"] if next_match else None,
-        "next_home_team": next_match["home_team"] if next_match else None,
-        "next_away_team": next_match["away_team"] if next_match else None,
+        "is_overtime": live.get("is_overtime", False) if is_playing else False,
+        "is_shootout": live.get("is_shootout", False) if is_playing else False,
+        # Goal data — changes on every new goal → triggers automations
+        "goals_count": len(goals),
+        "last_goal_scorer": last_goal.get("scorer") if last_goal else None,
+        "last_goal_team": last_goal.get("team") if last_goal else None,
+        "last_goal_assists": last_goal.get("assists", []) if last_goal else [],
+        "last_goal_period": last_goal.get("period") if last_goal else None,
+        "last_goal_clock": last_goal.get("period_clock") if last_goal else None,
+        "last_goal_situation": last_goal.get("situation") if last_goal else None,
+        # Full goals list available as JSON attribute on the status sensor
+        "goals": goals,
+        # Next match
+        "next_datetime": next_dt,
+        "next_today": next_today,
+        "next_time": next_time,
+        "next_opponent": next_match.get("opponent") if next_match else None,
+        "next_home_team": next_match.get("home_team") if next_match else None,
+        "next_away_team": next_match.get("away_team") if next_match else None,
+        # Last match
         "last_score": (
             f"{last_match['home_score']}\u2013{last_match['away_score']}"
             if last_match and last_match.get("home_score") is not None
@@ -271,6 +310,8 @@ def _build_state(status_payload: dict) -> dict:
         ),
         "last_opponent": last_match.get("opponent") if last_match else None,
         "last_won": last_match.get("won") if last_match else None,
+        "last_period_scores": last_period_scores,
+        "last_went_ot": last_went_ot,
     }
 
 
@@ -338,7 +379,7 @@ class MQTTPublisher:
                         5: "not authorised",
                     }
                     reason = rc_messages.get(rc, f"unknown rc={rc}")
-                    print(f"[MQTT] ERROR: Connection refused - {reason}", flush=True)
+                    print(f"[MQTT] ERROR: Connection refused – {reason}", flush=True)
                     logger.error("MQTT connect failed, rc=%s (%s)", rc, reason)
 
             def on_disconnect(client, userdata, rc):
@@ -356,7 +397,7 @@ class MQTTPublisher:
             return True
         except ImportError:
             print(
-                "[MQTT] ERROR: paho-mqtt is not installed - rebuild the add-on",
+                "[MQTT] ERROR: paho-mqtt is not installed – rebuild the add-on",
                 flush=True,
             )
             logger.error("paho-mqtt not installed")
@@ -397,7 +438,7 @@ class MQTTPublisher:
         HA will create the entities automatically; no YAML needed.
         """
         if not self._connected or not self._client:
-            logger.debug("MQTT not connected - skipping discovery for %s", watch["id"])
+            logger.debug("MQTT not connected – skipping discovery for %s", watch["id"])
             return
 
         watch_id = watch["id"]
@@ -427,7 +468,7 @@ class MQTTPublisher:
 
         # Define all entities for this watch
         entity_defs = [
-            # Main status sensor (also carries JSON attributes for automations)
+            # Main status sensor (also carries ALL JSON attributes for automations)
             (
                 *_base("status"),
                 {
@@ -449,7 +490,7 @@ class MQTTPublisher:
                     "icon": "mdi:play-circle",
                 },
             ),
-            # Score  "2-1"
+            # Score  "2–1"
             (
                 *_base("score"),
                 {
@@ -458,7 +499,7 @@ class MQTTPublisher:
                     "icon": "mdi:scoreboard",
                 },
             ),
-            # Period label  "Period 2"
+            # Period label  "Period 2" / "Övertid" / "Straffar"
             (
                 *_base("period"),
                 {
@@ -480,13 +521,45 @@ class MQTTPublisher:
                     "icon": "mdi:calendar",
                 },
             ),
-            # Last result  "3-2"
+            # Last result  "3–2"
             (
                 *_base("last_result"),
                 {
                     "name": f"{display_name} Last Result",
                     "value_template": "{{ value_json.last_score or '-' }}",
                     "icon": "mdi:history",
+                },
+            ),
+            # Last goal scorer — changes value on every new goal → ideal automation trigger
+            (
+                *_base("last_goal_scorer"),
+                {
+                    "name": f"{display_name} Last Goal Scorer",
+                    "value_template": "{{ value_json.last_goal_scorer or '-' }}",
+                    "icon": "mdi:hockey-puck",
+                },
+            ),
+            # Total goals in current game — integer that increases with each goal
+            (
+                *_base("goals_count"),
+                {
+                    "name": f"{display_name} Goals",
+                    "value_template": "{{ value_json.goals_count }}",
+                    "icon": "mdi:counter",
+                    "state_class": "measurement",
+                },
+            ),
+            # OT/SO binary sensor
+            (
+                *_base("overtime", "binary_sensor"),
+                {
+                    "name": f"{display_name} Overtime",
+                    "value_template": (
+                        "{{ (value_json.is_overtime or value_json.is_shootout) | lower }}"
+                    ),
+                    "payload_on": "true",
+                    "payload_off": "false",
+                    "icon": "mdi:clock-alert",
                 },
             ),
         ]
@@ -508,11 +581,11 @@ class MQTTPublisher:
 
         print(
             f"[MQTT] Discovery published: {display_name} ({watch_id}) "
-            f"slug={slug} -> {len(discovery_topics)} entities",
+            f"slug={slug} → {len(discovery_topics)} entities",
             flush=True,
         )
         logger.info(
-            "MQTT Discovery published: %s (%s) -> %d entities",
+            "MQTT Discovery published: %s (%s) → %d entities",
             display_name,
             watch_id,
             len(discovery_topics),
@@ -542,7 +615,7 @@ class MQTTPublisher:
             json.dumps(state, ensure_ascii=False),
         )
         logger.info(
-            "MQTT state: %s -> status=%s score=%s",
+            "MQTT state: %s → status=%s score=%s",
             watch_id,
             state["status"],
             state["score"],
@@ -586,7 +659,7 @@ def create(cfg: dict) -> Optional[MQTTPublisher]:
     """
     host = (cfg.get("mqtt_host") or "").strip()
     if not host:
-        logger.info("MQTT not configured (mqtt_host is empty) - push disabled")
+        logger.info("MQTT not configured (mqtt_host is empty) – push disabled")
         return None
     return MQTTPublisher(
         host=host,
@@ -594,6 +667,7 @@ def create(cfg: dict) -> Optional[MQTTPublisher]:
         username=cfg.get("mqtt_username") or "",
         password=cfg.get("mqtt_password") or "",
     )
+
 MQTT_PY_EOF
 
 RUN chmod +x /app/run.sh
