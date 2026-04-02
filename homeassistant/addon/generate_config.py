@@ -55,7 +55,12 @@ def main() -> None:
     new_entries: dict = {}
     for w in watches:
         team = w["team"]
-        season_ids = sorted(int(s) for s in w["season_ids"])
+        raw = w["season_ids"]
+        # season_ids arrives as a comma-separated string from the HA UI
+        if isinstance(raw, str):
+            season_ids = sorted(int(s.strip()) for s in raw.split(",") if s.strip())
+        else:
+            season_ids = sorted(int(s) for s in raw)
         wid = _generate_id(team, season_ids)
         new_entries[wid] = {"id": wid, "team": team, "season_ids": season_ids}
 

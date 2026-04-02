@@ -32,15 +32,12 @@ ports_description:
 options:
   watches:
     - team: "Färjestad BK"
-      season_ids:
-        - 18263
-        - 19791
+      season_ids: "18263, 19791"
 
 schema:
   watches:
     - team: str
-      season_ids:
-        - int
+      season_ids: str
 
 # Persistent storage – watchlist.json and generated config land here
 map:

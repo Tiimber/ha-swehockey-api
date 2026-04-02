@@ -6,20 +6,16 @@
 |---|---|---|
 | `watches` | list | One entry per team to follow |
 | `watches[].team` | string | Exact team name as it appears on stats.swehockey.se (see below) |
-| `watches[].season_ids` | list of int | One or more season IDs to follow for that team |
+| `watches[].season_ids` | string | Comma-separated season IDs, e.g. `"18263, 19791"` |
 
 Example:
 
 ```yaml
 watches:
   - team: "HV 71"
-    season_ids:
-      - 18263   # SHL regular season
-      - 19791   # SHL playoffs
+    season_ids: "18263, 19791"
   - team: "Frölunda"
-    season_ids:
-      - 18263
-      - 18289   # Champions Hockey League
+    season_ids: "18263, 18289"
 ```
 
 Each entry is automatically added to the watchlist at startup. Entries you add manually via the API (`POST /watch`) are preserved across restarts.
@@ -91,18 +87,11 @@ Add as many entries as you like. A team playing in both SHL and CHL gets one ent
 ```yaml
 watches:
   - team: "HV 71"
-    season_ids:
-      - 18263   # SHL regular season
-      - 19791   # SHL playoffs
+    season_ids: "18263, 19791"
   - team: "Frölunda"
-    season_ids:
-      - 18263
-      - 19791
-      - 18289   # Champions Hockey League
+    season_ids: "18263, 19791, 18289"
   - team: "Mora IK"
-    season_ids:
-      - 18266   # HockeyAllsvenskan regular season
-      - 19979   # HockeyAllsvenskan playoffs
+    season_ids: "18266, 19979"
 ```
 
 Each team gets its own stable watch ID. Use `GET /watches` to list all entries and their IDs.
