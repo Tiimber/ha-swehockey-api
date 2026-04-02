@@ -208,6 +208,7 @@ def _build_state(status_payload: dict) -> dict:
             if last_match and last_match.get("home_score") is not None
             else None
         ),
+        "last_date": last_match_date,
         "last_opponent": last_match.get("opponent") if last_match else None,
         "last_home_team": last_match.get("home_team") if last_match else None,
         "last_away_team": last_match.get("away_team") if last_match else None,

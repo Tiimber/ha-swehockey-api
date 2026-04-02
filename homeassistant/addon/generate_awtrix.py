@@ -196,7 +196,9 @@ _T = """\
   condition:
     - condition: template
       value_template: >
-        {{ states('sensor.hockeylive___SLUG___status') == 'finished_today' }}
+        {{ states('sensor.hockeylive___SLUG___status') == 'finished_today'
+           or (state_attr('sensor.hockeylive___SLUG___status','last_date') is not none
+               and state_attr('sensor.hockeylive___SLUG___status','last_date') == now().strftime('%Y-%m-%d')) }}
   action:
     - service: mqtt.publish
       data:

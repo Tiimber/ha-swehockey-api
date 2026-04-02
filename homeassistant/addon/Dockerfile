@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_4100
+ARG CACHEBUST=20260402_4200
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -245,9 +245,28 @@ def _build_state(status_payload: dict) -> dict:
     last_match = status_payload.get("last_match")
     is_playing = live.get("is_playing", False)
 
+    # Compute last_match_today early — drives status logic
+    last_match_date = last_match.get("date") if last_match else None
+    last_match_today = False
+    if last_match_date:
+        try:
+            now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
+            last_match_today = last_match_date == now_sthlm.strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+    # Status and main score
     if is_playing:
         status = "live"
         score = f"{live.get('home_score', 0)}\u2013{live.get('away_score', 0)}"
+    elif last_match_today:
+        # Game finished today — keep showing result until midnight
+        status = "finished_today"
+        score = (
+            f"{last_match['home_score']}\u2013{last_match['away_score']}"
+            if last_match and last_match.get("home_score") is not None
+            else "\u2013"
+        )
     elif next_match:
         status = "upcoming"
         score = "\u2013"
@@ -272,11 +291,13 @@ def _build_state(status_payload: dict) -> dict:
         except Exception:
             pass
 
-    # Last match OT/SO detection from period_scores string e.g. "(2-0)(1-2)(0-1)(1-0)"
+    # Last match OT/SO detection: period_scores is '(0-1, 2-0, 0-1, 1-0)' on
+    # swehockey.se — comma-separated inside ONE set of parens, NOT separate tokens.
+    # >=4 entries means at least one OT period was played.
     last_period_scores = last_match.get("period_scores") if last_match else None
     last_went_ot = False
-    if last_period_scores:
-        last_went_ot = len(re.findall(r"\(\d+-\d+\)", last_period_scores)) >= 4
+    if last_period_scores and last_period_scores.startswith("("):
+        last_went_ot = last_period_scores.count(",") + 1 >= 4
 
     return {
         "status": status,
@@ -314,10 +335,16 @@ def _build_state(status_payload: dict) -> dict:
             if last_match and last_match.get("home_score") is not None
             else None
         ),
+        "last_date": last_match_date,
         "last_opponent": last_match.get("opponent") if last_match else None,
+        "last_home_team": last_match.get("home_team") if last_match else None,
+        "last_away_team": last_match.get("away_team") if last_match else None,
+        "last_home_score": last_match.get("home_score") if last_match else None,
+        "last_away_score": last_match.get("away_score") if last_match else None,
         "last_won": last_match.get("won") if last_match else None,
         "last_period_scores": last_period_scores,
         "last_went_ot": last_went_ot,
+        "last_match_today": last_match_today,
     }
 
 
@@ -910,7 +937,9 @@ _T = """\
   condition:
     - condition: template
       value_template: >
-        {{ states('sensor.hockeylive___SLUG___status') == 'finished_today' }}
+        {{ states('sensor.hockeylive___SLUG___status') == 'finished_today'
+           or (state_attr('sensor.hockeylive___SLUG___status','last_date') is not none
+               and state_attr('sensor.hockeylive___SLUG___status','last_date') == now().strftime('%Y-%m-%d')) }}
   action:
     - service: mqtt.publish
       data:
@@ -1085,7 +1114,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260402_4100
+ENV BUILD_ID=20260402_4200
 
 EXPOSE 8080
 
