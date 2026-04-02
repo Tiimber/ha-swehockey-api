@@ -348,6 +348,7 @@ def main() -> None:
     if supervisor_token:
         try:
             import urllib.request
+
             req = urllib.request.Request(
                 "http://supervisor/core/api/services/automation/reload",
                 data=b"{}",
