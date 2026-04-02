@@ -367,30 +367,19 @@ def _live_detail(game: dict) -> dict:
         penalties = events_data.get("penalties", [])
         active_penalties = events_data.get("active_penalties", [])
     else:
-        # Heuristic: estimate period from elapsed real time
-        # Approx intermission-aware breakpoints (minutes after puck drop):
-        #   P1: 0–25, intermission1: 25–42, P2: 42–67,
-        #   intermission2: 67–84, P3: 84–109, OT: 109–125, SO: 125+
-        elapsed = (_now() - game["datetime"]).total_seconds() / 60
-        if elapsed < 25:
-            period = "P1"
-        elif elapsed < 42:
-            period = "P1"  # still in first intermission, game clock stopped
-        elif elapsed < 67:
-            period = "P2"
-        elif elapsed < 84:
-            period = "P2"
-        elif elapsed < 109:
-            period = "P3"
-        elif elapsed < 125:
-            period = "OT"
-        else:
-            period = "SO"
+        # Primary fallback: infer period from period_scores on the schedule page.
+        # The schedule shows one entry per completed period, e.g. "(2-1, 0-1)"
+        # means 2 periods complete → game is in P3.  This is reliable regardless
+        # of how long the game has been running (avoids the time-heuristic "SO" trap).
+        ps = game.get("period_scores") or ""
+        completed_periods = ps.count(",") + 1 if ps.startswith("(") else 0
+        period = {0: "P1", 1: "P2", 2: "P3"}.get(completed_periods, "P3")
+
         home_score = game["home_score"] or 0
         away_score = game["away_score"] or 0
         period_clock = None
-        is_overtime = period == "OT"
-        is_shootout = period == "SO"
+        is_overtime = False
+        is_shootout = False
         goals = []
         last_goal = None
         penalties = []
