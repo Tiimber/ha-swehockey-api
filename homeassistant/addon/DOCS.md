@@ -4,8 +4,27 @@
 
 | Option | Type | Description |
 |---|---|---|
-| `team` | string | Exact team name as it appears on stats.swehockey.se (see below) |
-| `season_ids` | list of int | One or more season IDs to follow (see below) |
+| `watches` | list | One entry per team to follow |
+| `watches[].team` | string | Exact team name as it appears on stats.swehockey.se (see below) |
+| `watches[].season_ids` | list of int | One or more season IDs to follow for that team |
+
+Example:
+
+```yaml
+watches:
+  - team: "HV 71"
+    season_ids:
+      - 18263   # SHL regular season
+      - 19791   # SHL playoffs
+  - team: "Frölunda"
+    season_ids:
+      - 18263
+      - 18289   # Champions Hockey League
+```
+
+Each entry is automatically added to the watchlist at startup. Entries you add manually via the API (`POST /watch`) are preserved across restarts.
+
+The **first** entry in `watches` is used as the default team for the root endpoints (`/next`, `/last`, `/live`, `/status`). All entries are accessible via `/watch/<id>/...` regardless of order.
 
 ---
 
@@ -65,17 +84,28 @@ The `team` field must match exactly what stats.swehockey.se uses. Use `/search` 
 
 ---
 
-## Multiple leagues
+## Multiple teams and leagues
 
-To follow a team across SHL + playoffs + CHL, list all season IDs:
+Add as many entries as you like. A team playing in both SHL and CHL gets one entry with all relevant season IDs — the watchlist entry will aggregate all their games:
 
 ```yaml
-team: "Frölunda"
-season_ids:
-  - 18263   # SHL regular season
-  - 19791   # SHL playoffs
-  - 18289   # Champions Hockey League
+watches:
+  - team: "HV 71"
+    season_ids:
+      - 18263   # SHL regular season
+      - 19791   # SHL playoffs
+  - team: "Frölunda"
+    season_ids:
+      - 18263
+      - 19791
+      - 18289   # Champions Hockey League
+  - team: "Mora IK"
+    season_ids:
+      - 18266   # HockeyAllsvenskan regular season
+      - 19979   # HockeyAllsvenskan playoffs
 ```
+
+Each team gets its own stable watch ID. Use `GET /watches` to list all entries and their IDs.
 
 ---
 

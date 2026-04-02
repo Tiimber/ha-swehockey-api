@@ -30,15 +30,17 @@ ports_description:
 
 # Add-on options shown in the UI
 options:
-  team: "Färjestad BK"
-  season_ids:
-    - 18263
-    - 19791
+  watches:
+    - team: "Färjestad BK"
+      season_ids:
+        - 18263
+        - 19791
 
 schema:
-  team: str
-  season_ids:
-    - int
+  watches:
+    - team: str
+      season_ids:
+        - int
 
 # Persistent storage – watchlist.json and generated config land here
 map:
