@@ -3,7 +3,7 @@
 # Docs: https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: "HockeyLive API"
-version: "2.7.0"
+version: "2.7.1"
 slug: "hockeylive"
 description: >-
   Swedish ice hockey live scores, goals, penalties and schedule from
