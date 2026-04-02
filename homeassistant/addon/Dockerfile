@@ -12,7 +12,7 @@ FROM python:3.12-slim
 LABEL \
   io.hass.name="HockeyLive API" \
   io.hass.description="Swedish ice hockey live scores from swehockey.se" \
-  io.hass.version="2.1.0" \
+  io.hass.version="2.2.0" \
   io.hass.arch="aarch64|amd64|armv7"
 
 # System deps: libxml2/libxslt for lxml, curl for source download
