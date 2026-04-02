@@ -45,7 +45,7 @@ schema:
   mqtt_username: str
   mqtt_password: str
   watches:
-    - name: str?
+    - name: str
       team: str
       season_ids: str
 
