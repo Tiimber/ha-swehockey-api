@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_2700
+ARG CACHEBUST=20260402_2800
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -463,16 +463,17 @@ class MQTTPublisher:
             ("sensor", "last_result"),
             ("sensor", "last_goal_scorer"),
             ("sensor", "goals_count"),
-            ("sensor", "goals"),          # old name before → goals_count
-            ("sensor", "last_match"),     # old name before → last_result
+            ("sensor", "goals"),  # old name before → goals_count
+            ("sensor", "last_match"),  # old name before → last_result
             ("binary_sensor", "overtime"),
         ]
         cleared = 0
         for comp, sfx in _LEGACY_SUFFIXES:
             for old_id in [
-                f"{slug}_{slug}_{sfx}",  # double-slug (HA auto-gen without object_id)
-                f"{slug}_{sfx}",  # single-slug without hockeylive_ prefix
+                f"{slug}_{slug}_{sfx}",        # double-slug (HA auto-gen without object_id)
+                f"{slug}_{sfx}",               # single-slug without hockeylive_ prefix
                 f"hockeylive_{watch_id}_{sfx}",  # unique_id-based (very old format)
+                f"hockeylive_{slug}_{sfx}",    # object_id-based with old unique_id (v2.6-v2.7)
             ]:
                 self._pub(f"{DISCOVERY_PREFIX}/{comp}/{old_id}/config", "")
                 cleared += 1
@@ -491,7 +492,9 @@ class MQTTPublisher:
         def _base(suffix: str, component: str = "sensor") -> tuple[str, str, dict]:
             object_id = f"hockeylive_{slug}_{suffix}"
             cfg: dict = {
-                "unique_id": f"hockeylive_{watch_id}_{suffix}",
+                # uid2_ prefix forces HA to treat these as new entities, breaking
+                # the mapping from old wrongly-named entities (hockeylive_{watch_id}_*)
+                "unique_id": f"uid2_{watch_id}_{suffix}",
                 "object_id": object_id,
                 "state_topic": state_t,
                 "availability_topic": avail_t,
