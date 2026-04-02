@@ -383,6 +383,8 @@ _PERIOD_HEADERS: dict[str, str] = {
     "FLD": "OT",
     "FÖRL": "OT",
     "OVERTIME": "OT",
+    "1ST OVERTIME": "OT",
+    "2ND OVERTIME": "OT",
     "SO": "SO",
     "PSO": "SO",
     "STRAFFAR": "SO",
@@ -752,6 +754,65 @@ def _parse_game_events(html: str) -> dict:
         "active_penalties": [p for p in penalties if p["is_active"]],
         "events": public_events,
     }
+
+
+# ---------------------------------------------------------------------------
+# Live game-ID lookup via GamesByDate
+# ---------------------------------------------------------------------------
+
+# The swehockey schedule page only includes Game/Events links for COMPLETED games.
+# For live (in-progress) games the link is missing from the schedule row.
+# The GamesByDate page always contains the link, even for live games.
+# The "90" suffix is a fixed timezone parameter used by the swehockey site.
+_GAMES_BY_DATE_TZ = "90"
+
+
+def fetch_game_id_by_date(
+    date_str: str, home_team: str, away_team: str
+) -> Optional[int]:
+    """
+    Look up a game_id from the GamesByDate page when it is absent from the
+    season schedule (which happens for live games on swehockey.se).
+
+    Args:
+        date_str:  "YYYY-MM-DD"
+        home_team: home team name as found in the schedule
+        away_team: away team name as found in the schedule
+
+    Returns an int game_id, or None if not found.
+    """
+    url = f"{BASE_URL}/GamesByDate/{date_str}/ByTime/{_GAMES_BY_DATE_TZ}"
+    html = _get(url)
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "lxml")
+    home_lo = home_team.lower()
+    away_lo = away_team.lower()
+
+    for row in soup.find_all("tr"):
+        cells = row.find_all("td")
+        if len(cells) < 3:
+            continue
+        # Game cell (index 1) contains "Home - Away [Round]"
+        game_text = cells[1].get_text(" ", strip=True).lower()
+        if home_lo in game_text and away_lo in game_text:
+            # Game_id link is in the Result cell (index 2) and may have empty text
+            for cell in cells:
+                for a in cell.find_all("a"):
+                    href = a.get("href", "") or ""
+                    m = re.search(r"Game/Events/(\d+)", href)
+                    if m:
+                        gid = int(m.group(1))
+                        logger.debug(
+                            "Found game_id %d via GamesByDate for %s vs %s on %s",
+                            gid,
+                            home_team,
+                            away_team,
+                            date_str,
+                        )
+                        return gid
+    return None
 
 
 # ---------------------------------------------------------------------------

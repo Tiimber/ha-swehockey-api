@@ -353,7 +353,20 @@ def _live_detail(game: dict) -> dict:
       period, period_clock, scores, goals, last_goal, penalties, active_penalties.
     Falls back to heuristic period estimation if scraping fails.
     """
-    events_data = scraper.fetch_game_events(game["game_id"])
+    game_id = game.get("game_id")
+
+    # The season schedule page omits the Game/Events link for live (in-progress)
+    # games.  When game_id is missing, try the GamesByDate page which always
+    # includes it.  Cache the result back into the game dict to avoid a lookup
+    # on every subsequent call.
+    if not game_id and game.get("date") and game.get("home_team") and game.get("away_team"):
+        game_id = scraper.fetch_game_id_by_date(
+            game["date"], game["home_team"], game["away_team"]
+        )
+        if game_id:
+            game["game_id"] = game_id  # persist in cache so next call is free
+
+    events_data = scraper.fetch_game_events(game_id)
 
     if events_data and events_data.get("period"):
         period = events_data["period"]
