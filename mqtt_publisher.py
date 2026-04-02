@@ -71,6 +71,10 @@ def _state_topic(watch_id: str) -> str:
     return f"{MQTT_PREFIX}/{watch_id}/state"
 
 
+def _attr_topic(watch_id: str) -> str:
+    return f"{MQTT_PREFIX}/{watch_id}/attr"
+
+
 def _avail_topic(watch_id: str) -> str:
     return f"{MQTT_PREFIX}/{watch_id}/availability"
 
@@ -412,7 +416,7 @@ class MQTTPublisher:
                     "name": "Status",
                     "value_template": "{{ value_json.status }}",
                     "icon": "mdi:hockey-sticks",
-                    "json_attributes_topic": state_t,
+                    "json_attributes_topic": _attr_topic(watch_id),
                 },
             ),
             # Binary sensor: is a game live right now?
@@ -547,10 +551,9 @@ class MQTTPublisher:
             return False  # nothing changed
 
         self._state_hashes[watch_id] = h
-        self._pub(
-            _state_topic(watch_id),
-            json.dumps(state, ensure_ascii=False),
-        )
+        payload_json = json.dumps(state, ensure_ascii=False)
+        self._pub(_state_topic(watch_id), payload_json)
+        self._pub(_attr_topic(watch_id), payload_json)
         logger.info(
             "MQTT state: %s → status=%s score=%s",
             watch_id,

@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_4000
+ARG CACHEBUST=20260402_4100
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -196,6 +196,10 @@ def watch_slug(watch: dict) -> str:
 
 def _state_topic(watch_id: str) -> str:
     return f"{MQTT_PREFIX}/{watch_id}/state"
+
+
+def _attr_topic(watch_id: str) -> str:
+    return f"{MQTT_PREFIX}/{watch_id}/attr"
 
 
 def _avail_topic(watch_id: str) -> str:
@@ -513,7 +517,7 @@ class MQTTPublisher:
                     "name": "Status",
                     "value_template": "{{ value_json.status }}",
                     "icon": "mdi:hockey-sticks",
-                    "json_attributes_topic": state_t,
+                    "json_attributes_topic": _attr_topic(watch_id),
                 },
             ),
             # Binary sensor: is a game live right now?
@@ -648,10 +652,9 @@ class MQTTPublisher:
             return False  # nothing changed
 
         self._state_hashes[watch_id] = h
-        self._pub(
-            _state_topic(watch_id),
-            json.dumps(state, ensure_ascii=False),
-        )
+        payload_json = json.dumps(state, ensure_ascii=False)
+        self._pub(_state_topic(watch_id), payload_json)
+        self._pub(_attr_topic(watch_id), payload_json)
         logger.info(
             "MQTT state: %s → status=%s score=%s",
             watch_id,
@@ -1082,7 +1085,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260402_4000
+ENV BUILD_ID=20260402_4100
 
 EXPOSE 8080
 
