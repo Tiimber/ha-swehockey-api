@@ -1,0 +1,278 @@
+# =============================================================================
+# AWTRIX Hockey Scoreboard – Frölunda HC
+# =============================================================================
+# Byt ut dessa värden:
+#   AWTRIX_PREFIX   : MQTT-prefix för din Ulanzi (standard: awtrix_XXXXXX)
+#   WATCH_ID        : Watch-ID from HockeyLive (visas i loggen, t.ex. 7020a314)
+#   APP_NAME        : Namn på appen i AWTRIX-loopen (godtyckligt, inga mellanslag)
+#   HOME_ICON       : AWTRIX-ikon-ID för hemmalaget (sätt senare)
+#   AWAY_ICON       : AWTRIX-ikon-ID för bortalaget (sätt senare)
+#   TEAM_ICON       : AWTRIX-ikon-ID för bevakat lag (visas utanför match)
+#
+# State-sensor:  sensor.hockeylive_frolunda_status
+# State-topic:   hockeylive/7020a314/state
+# =============================================================================
+#
+# AWTRIX-skärmen är 32x8 pixlar.
+# Prickarna för perioder ritas med "draw" på rad y=7 (nedersta raden):
+#   P1: x=14  P2: x=16  P3: x=18  OT: x=20  SO: x=22
+# Färger:
+#   Pågående period : gul   #FFD700
+#   Avverkad period : mörkblå #1E3A5F
+#   Ej påbörjad     : grå   #404040
+#   Vinst (slut)    : grön  #00C800
+#   Förlust (slut)  : röd   #C80000
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# AUTOMATION 1: Ingen match idag → visa lag + kalenderblad
+# ---------------------------------------------------------------------------
+- alias: "AWTRIX Hockey – Ingen match idag"
+  id: awtrix_hockey_no_match_today
+  trigger:
+    - platform: state
+      entity_id: sensor.hockeylive_frolunda_status
+    - platform: time_pattern
+      minutes: "/30"
+  condition:
+    - condition: template
+      value_template: >
+        {{ states('sensor.hockeylive_frolunda_status') in ['upcoming', 'idle']
+           and not state_attr('sensor.hockeylive_frolunda_status', 'next_today') }}
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "awtrix_XXXXXX/custom/hockey_frolunda"
+        payload: >
+          {
+            "icon": "F",
+            "text": [
+              {"t": "Nästa: ", "c": "888888"},
+              {"t": "{{ state_attr('sensor.hockeylive_frolunda_status', 'next_datetime')[:10] | replace('-', '/') if state_attr('sensor.hockeylive_frolunda_status', 'next_datetime') else '?' }}", "c": "FFFFFF"}
+            ],
+            "duration": 10,
+            "lifetime": 120
+          }
+
+# ---------------------------------------------------------------------------
+# AUTOMATION 2: Match imorgon/idag men inte startat → nedräkning (varje minut)
+# ---------------------------------------------------------------------------
+- alias: "AWTRIX Hockey – Nedräkning till match"
+  id: awtrix_hockey_countdown
+  trigger:
+    - platform: time_pattern
+      minutes: "/1"
+    - platform: state
+      entity_id: sensor.hockeylive_frolunda_status
+  condition:
+    - condition: template
+      value_template: >
+        {{ states('sensor.hockeylive_frolunda_status') == 'upcoming'
+           and state_attr('sensor.hockeylive_frolunda_status', 'next_today') == true
+           and states('binary_sensor.hockeylive_frolunda_live') == 'off' }}
+  action:
+    - variables:
+        next_dt: "{{ state_attr('sensor.hockeylive_frolunda_status', 'next_datetime') }}"
+        next_time: "{{ state_attr('sensor.hockeylive_frolunda_status', 'next_time') }}"
+        mins_left: >
+          {% set now_ts = now().timestamp() %}
+          {% set match_ts = as_timestamp(next_dt) %}
+          {% set diff = ((match_ts - now_ts) / 60) | int %}
+          {{ [diff, 0] | max }}
+        countdown_text: >
+          {% set m = mins_left %}
+          {% if m >= 60 %}
+            {{ (m // 60) }}h {{ m % 60 }}min
+          {% elif m > 0 %}
+            {{ m }} min
+          {% else %}
+            Nu!
+          {% endif %}
+    - service: mqtt.publish
+      data:
+        topic: "awtrix_XXXXXX/custom/hockey_frolunda"
+        payload: >
+          {
+            "icon": "F",
+            "text": [
+              {"t": "{{ next_time }} ", "c": "FFD700"},
+              {"t": "{{ countdown_text }}", "c": "FFFFFF"}
+            ],
+            "duration": 10,
+            "lifetime": 120
+          }
+
+# ---------------------------------------------------------------------------
+# AUTOMATION 3: Live scoreboard – uppdateras när state ändras
+# ---------------------------------------------------------------------------
+- alias: "AWTRIX Hockey – Live scoreboard"
+  id: awtrix_hockey_live_scoreboard
+  trigger:
+    - platform: state
+      entity_id: sensor.hockeylive_frolunda_status
+    - platform: state
+      entity_id: sensor.hockeylive_frolunda_score
+    - platform: state
+      entity_id: sensor.hockeylive_frolunda_period
+  condition:
+    - condition: state
+      entity_id: binary_sensor.hockeylive_frolunda_live
+      state: "on"
+  action:
+    - variables:
+        attrs: "{{ state_attr('sensor.hockeylive_frolunda_status', 'period') }}"
+        is_ot: "{{ state_attr('sensor.hockeylive_frolunda_status', 'is_overtime') }}"
+        is_so: "{{ state_attr('sensor.hockeylive_frolunda_status', 'is_shootout') }}"
+        home_score: "{{ state_attr('sensor.hockeylive_frolunda_status', 'home_score') | default(0) }}"
+        away_score: "{{ state_attr('sensor.hockeylive_frolunda_status', 'away_score') | default(0) }}"
+        home_letter: "{{ state_attr('sensor.hockeylive_frolunda_status', 'home_team')[0] | upper if state_attr('sensor.hockeylive_frolunda_status', 'home_team') else '?' }}"
+        away_letter: "{{ state_attr('sensor.hockeylive_frolunda_status', 'away_team')[0] | upper if state_attr('sensor.hockeylive_frolunda_status', 'away_team') else '?' }}"
+        # Period dot colors
+        # Pågående = gul, avverkad = mörkblå, ej started = grå
+        cur: "{{ attrs }}"
+        p1_col: >
+          {% if cur in ['P2','P3','OT','SO'] %}#1E3A5F
+          {% elif cur == 'P1' %}#FFD700
+          {% else %}#404040{% endif %}
+        p2_col: >
+          {% if cur in ['P3','OT','SO'] %}#1E3A5F
+          {% elif cur == 'P2' %}#FFD700
+          {% else %}#404040{% endif %}
+        p3_col: >
+          {% if cur in ['OT','SO'] %}#1E3A5F
+          {% elif cur == 'P3' %}#FFD700
+          {% else %}#404040{% endif %}
+        ot_col: >
+          {% if cur == 'SO' %}#1E3A5F
+          {% elif cur == 'OT' %}#FFD700
+          {% else %}#404040{% endif %}
+        so_col: >
+          {% if cur == 'SO' %}#FFD700
+          {% else %}#404040{% endif %}
+    - service: mqtt.publish
+      data:
+        topic: "awtrix_XXXXXX/custom/hockey_frolunda"
+        payload: >
+          {
+            "draw": [
+              {"dt": [0, 0, "{{ home_letter }}", "#FFFFFF"]},
+              {"dt": [6, 0, "{{ home_score }}-{{ away_score }}", "#FFD700"]},
+              {"dt": [22, 0, "{{ away_letter }}", "#FFFFFF"]},
+              {"dfc": [14, 7, 1, "{{ p1_col }}"]},
+              {"dfc": [17, 7, 1, "{{ p2_col }}"]},
+              {"dfc": [20, 7, 1, "{{ p3_col }}"]},
+              {"dfc": [23, 7, 1, "{{ ot_col }}"]},
+              {"dfc": [26, 7, 1, "{{ so_col }}"]}
+            ],
+            "noScroll": true,
+            "lifetime": 120
+          }
+
+# ---------------------------------------------------------------------------
+# AUTOMATION 4: Mål! – notis med målgörare och assists (30 sek)
+# ---------------------------------------------------------------------------
+- alias: "AWTRIX Hockey – Mål!"
+  id: awtrix_hockey_goal
+  trigger:
+    - platform: state
+      entity_id: sensor.hockeylive_frolunda_last_goal_scorer
+  condition:
+    - condition: state
+      entity_id: binary_sensor.hockeylive_frolunda_live
+      state: "on"
+    - condition: template
+      value_template: "{{ trigger.to_state.state not in ['unknown', 'unavailable', '-'] }}"
+  action:
+    - variables:
+        scorer: "{{ trigger.to_state.state }}"
+        team: "{{ state_attr('sensor.hockeylive_frolunda_status', 'last_goal_team') }}"
+        assists: "{{ state_attr('sensor.hockeylive_frolunda_status', 'last_goal_assists') }}"
+        situation: "{{ state_attr('sensor.hockeylive_frolunda_status', 'last_goal_situation') }}"
+        clock: "{{ state_attr('sensor.hockeylive_frolunda_status', 'last_goal_clock') }}"
+        score: "{{ state_attr('sensor.hockeylive_frolunda_status', 'score') }}"
+        assist_text: >
+          {% if assists %}Ass: {{ assists | join(', ') }}{% endif %}
+        situation_color: >
+          {% if situation == 'PP' %}#FFD700
+          {% elif situation == 'SH' %}#00AAFF
+          {% else %}#FFFFFF{% endif %}
+        goal_icon: "{{ team[0] | upper if team else 'G' }}"
+    - service: mqtt.publish
+      data:
+        topic: "awtrix_XXXXXX/notify"
+        payload: >
+          {
+            "icon": "{{ goal_icon }}",
+            "text": [
+              {"t": "MÅL! ", "c": "FFD700"},
+              {"t": "{{ scorer }}", "c": "FFFFFF"},
+              {"t": " {{ score }}", "c": "FFD700"}
+              {% if assist_text %},{"t": " {{ assist_text }}", "c": "888888"}{% endif %}
+              {% if situation != 'ES' and situation %},{"t": " ({{ situation }})", "c": "{{ situation_color }}"}{% endif %}
+            ],
+            "duration": 30,
+            "stack": false,
+            "wakeup": true
+          }
+
+# ---------------------------------------------------------------------------
+# AUTOMATION 5: Match slut – visa slutresultat med periodindikatorer
+# ---------------------------------------------------------------------------
+- alias: "AWTRIX Hockey – Match slut"
+  id: awtrix_hockey_finished
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.hockeylive_frolunda_live
+      to: "off"
+  condition:
+    - condition: template
+      # Kontrollera att vi faktiskt hade en pågående match (not just startup)
+      value_template: >
+        {{ trigger.from_state.state == 'on'
+           and state_attr('sensor.hockeylive_frolunda_status', 'last_score') not in [none, '-'] }}
+  action:
+    - variables:
+        won: "{{ state_attr('sensor.hockeylive_frolunda_status', 'last_won') }}"
+        last_score: "{{ state_attr('sensor.hockeylive_frolunda_status', 'last_score') }}"
+        went_ot: "{{ state_attr('sensor.hockeylive_frolunda_status', 'last_went_ot') }}"
+        period_scores: "{{ state_attr('sensor.hockeylive_frolunda_status', 'last_period_scores') }}"
+        dot_color: "{% if won %}#00C800{% else %}#C80000{% endif %}"
+        # OT/SO dot: grön/röd om match gick dit, annars grå
+        ot_dot: >
+          {% if went_ot %}{{ dot_color }}{% else %}#404040{% endif %}
+        result_color: "{% if won %}#00C800{% else %}#C80000{% endif %}"
+    - service: mqtt.publish
+      data:
+        topic: "awtrix_XXXXXX/custom/hockey_frolunda"
+        payload: >
+          {
+            "icon": "F",
+            "text": [
+              {"t": "{{ last_score }}", "c": "{{ result_color }}"},
+              {"t": " {% if won %}✓{% else %}✗{% endif %}", "c": "{{ result_color }}"}
+            ],
+            "draw": [
+              {"dfc": [14, 7, 1, "{{ dot_color }}"]},
+              {"dfc": [17, 7, 1, "{{ dot_color }}"]},
+              {"dfc": [20, 7, 1, "{{ dot_color }}"]},
+              {"dfc": [23, 7, 1, "{{ ot_dot }}"]},
+              {"dfc": [26, 7, 1, "#404040"]}
+            ],
+            "noScroll": false,
+            "duration": 30,
+            "lifetime": 3600
+          }
+
+# ---------------------------------------------------------------------------
+# AUTOMATION 6: Rensa AWTRIX-app när dag byter (ingen match mer idag)
+# ---------------------------------------------------------------------------
+- alias: "AWTRIX Hockey – Rensa vid midnatt"
+  id: awtrix_hockey_midnight_clear
+  trigger:
+    - platform: time
+      at: "00:00:30"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "awtrix_XXXXXX/custom/hockey_frolunda"
+        payload: ""
