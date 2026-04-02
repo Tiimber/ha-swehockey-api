@@ -335,7 +335,9 @@ def main() -> None:
         indented.append("")
 
     OUT_FILE.write_text(header + "\n" + "\n".join(indented), encoding="utf-8")
-    print(f"[generate_awtrix] {len(enabled)} enabled + {len(disabled)} disabled → {OUT_FILE}")
+    print(
+        f"[generate_awtrix] {len(enabled)} enabled + {len(disabled)} disabled → {OUT_FILE}"
+    )
     print(
         f"[generate_awtrix] Prefix: {prefix}, Watches: {[w.get('name') or w['team'] for w in enabled]}"
     )
