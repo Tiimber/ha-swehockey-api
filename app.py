@@ -299,9 +299,12 @@ def _is_live(game: dict) -> bool:
       - it has started (datetime is in the past)
       - it started within the last 4 hours
       - it is not yet completed (no period_scores)
+      - it has a valid game_id (games without one can't be live-scraped)
     """
     dt = game.get("datetime")
     if not dt:
+        return False
+    if not game.get("game_id"):
         return False
     delta = (_now() - dt).total_seconds()
     return 0 < delta < 14400 and not game["is_completed"]
