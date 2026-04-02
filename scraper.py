@@ -230,12 +230,16 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
         if not home_team or not away_team:
             continue
 
-        # ── Game ID from javascript link (typically in the score cell) ─
+        # ── Game ID from javascript link ──────────────────────────────────
+        # Completed games have the link in the score cell; live/upcoming games
+        # may have it in the game-names cell or anywhere in the row.
         game_id: Optional[int] = None
-        for ci in range(score_cell_idx, min(score_cell_idx + 3, n)):
+        for ci in range(n):
             link = cells[ci].find("a")
             if link:
-                m = re.search(r"Game/Events/(\d+)", link.get("href", ""))
+                href = link.get("href", "") or ""
+                onclick = link.get("onclick", "") or ""
+                m = re.search(r"Game/Events/(\d+)", href + onclick)
                 if m:
                     game_id = int(m.group(1))
                     break
@@ -365,16 +369,13 @@ _MISCONDUCT_RE = re.compile(r"matchstraff|game\s*misconduct", re.I)
 
 # Valid Swedish/English period header tokens
 _PERIOD_HEADERS: dict[str, str] = {
-    "1": "P1",
-    "2": "P2",
-    "3": "P3",
-    "OT": "OT",
-    "OT5": "OT",
-    "FLD": "OT",
-    "FÖRL": "OT",
-    "SO": "SO",
-    "PSO": "SO",
-    "STRAFFAR": "SO",
+    # Numeric (Swedish site older format)
+    "1": "P1", "2": "P2", "3": "P3",
+    # English full names (current swehockey.se format)
+    "1ST PERIOD": "P1", "2ND PERIOD": "P2", "3RD PERIOD": "P3",
+    # Overtime / shootout variants
+    "OT": "OT", "OT5": "OT", "FLD": "OT", "FÖRL": "OT", "OVERTIME": "OT",
+    "SO": "SO", "PSO": "SO", "STRAFFAR": "SO", "SHOOTOUT": "SO",
 }
 
 
@@ -626,9 +627,14 @@ def _parse_game_events(html: str) -> dict:
                 break
 
     # ── Parse event rows from all tables ─────────────────────────────────
+    # NOTE: swehockey.se shows events newest-first (3rd period at top, 1st at
+    # bottom). We track "first_period" and "first_time_str" (first seen while
+    # iterating = most recent in the game) as the current game state.
     raw_events: list[dict] = []
-    last_time_str: Optional[str] = None
+    last_time_str: Optional[str] = None   # will be oldest event (last iterated)
+    first_time_str: Optional[str] = None  # will be newest event (first iterated)
     last_period: Optional[str] = None
+    first_period: Optional[str] = None    # current period (newest-first ordering)
 
     for table in soup.find_all("table"):
         current_period_label: Optional[str] = None
@@ -642,6 +648,8 @@ def _parse_game_events(html: str) -> dict:
                 if mapped:
                     current_period_label = mapped
                     last_period = mapped
+                    if first_period is None:
+                        first_period = mapped  # first seen = most recent period
                 continue
 
             cells = row.find_all("td")
@@ -660,6 +668,8 @@ def _parse_game_events(html: str) -> dict:
             if not re.fullmatch(r"\d{1,3}:\d{2}", time_cell):
                 continue
 
+            if first_time_str is None:
+                first_time_str = time_cell  # most recent game clock
             last_time_str = time_cell
 
             # Infer period from cumulative seconds when no header has been seen
@@ -668,6 +678,8 @@ def _parse_game_events(html: str) -> dict:
             if current_period_label is None:
                 current_period_label = inferred
             last_period = current_period_label
+            if first_period is None:
+                first_period = current_period_label
 
             event_type = cell_texts[1] if len(cell_texts) > 1 else ""
             team = cell_texts[2] if len(cell_texts) > 2 else ""
@@ -688,13 +700,17 @@ def _parse_game_events(html: str) -> dict:
         if raw_events:
             break
 
-    # ── Current game clock ────────────────────────────────────────────────
-    current_game_secs = _parse_mmss(last_time_str) or 0 if last_time_str else 0
+    # ── Current game clock (use the most recent = first seen event) ───────
+    # first_time_str is the most recent event; fall back to last_time_str.
+    current_time_str = first_time_str or last_time_str
+    current_game_secs = _parse_mmss(current_time_str) or 0 if current_time_str else 0
+    # current_period is the period of the most recent event (first seen)
+    current_period = first_period or last_period
 
     # ── Period clock (position within current period) ─────────────────────
     period_clock: Optional[str] = None
-    if last_time_str and last_period:
-        period_clock = _period_clock_str(current_game_secs, last_period)
+    if current_time_str and current_period:
+        period_clock = _period_clock_str(current_game_secs, current_period)
 
     # ── Classify events into goals / penalties ────────────────────────────
     goals, penalties = _classify_events(
@@ -714,11 +730,11 @@ def _parse_game_events(html: str) -> dict:
         "away_team": away_team,
         "home_score": home_score_total,
         "away_score": away_score_total,
-        "period": last_period,
+        "period": current_period,
         "period_clock": period_clock,
         "period_scores": [],
-        "is_overtime": last_period == "OT",
-        "is_shootout": last_period == "SO",
+        "is_overtime": current_period == "OT",
+        "is_shootout": current_period == "SO",
         "goals": goals,
         "last_goal": goals[-1] if goals else None,
         "penalties": penalties,
