@@ -439,6 +439,7 @@ async def root():
     return {
         "api": "HockeyLive API",
         "version": "2.0.0",
+        "build_id": os.environ.get("BUILD_ID", "dev"),
         "team": cfg["team"],
         "season_ids": cfg["season_ids"],
         "source": "stats.swehockey.se",
