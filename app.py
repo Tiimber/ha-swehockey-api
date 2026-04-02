@@ -298,13 +298,12 @@ def _is_live(game: dict) -> bool:
     A game is considered live if:
       - it has started (datetime is in the past)
       - it started within the last 4 hours
-      - it is not yet completed (no period_scores)
-      - it has a valid game_id (games without one can't be live-scraped)
+      - it is not yet completed (scraper requires >= 3 complete period entries)
+    Games without a game_id can still be detected as live; _live_detail()
+    gracefully falls back to heuristic period estimation when game_id is None.
     """
     dt = game.get("datetime")
     if not dt:
-        return False
-    if not game.get("game_id"):
         return False
     delta = (_now() - dt).total_seconds()
     return 0 < delta < 14400 and not game["is_completed"]

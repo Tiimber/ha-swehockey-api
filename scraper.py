@@ -264,7 +264,12 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
         except ValueError:
             pass
 
-        is_completed = home_score is not None and period_scores is not None
+        # A game is completed only when all 3 regulation periods have a score entry.
+        # During live play the schedule page shows partial period scores (e.g. "(2-1)"
+        # after P1, "(2-1, 0-1)" after P2) which would otherwise trigger a false match.
+        # We require ≥ 3 comma-separated entries (P1, P2, P3 all done).
+        period_entry_count = period_scores.count(",") + 1 if period_scores else 0
+        is_completed = home_score is not None and period_entry_count >= 3
 
         games.append(
             {
@@ -589,6 +594,8 @@ def fetch_game_events(game_id: int) -> dict:
         events (raw, for backward compatibility)
     Returns an empty dict on failure.
     """
+    if not game_id:
+        return {}
     url = f"{BASE_URL}/Game/Events/{game_id}"
     html = _get(url)
     if not html:
