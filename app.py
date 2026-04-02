@@ -255,11 +255,17 @@ async def lifespan(app: FastAPI):
     _mqtt_pub = mqtt_publisher.create(cfg)
     if _mqtt_pub is not None:
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, _mqtt_pub.connect)
-        await asyncio.sleep(1.5)  # wait for CONNACK
-        for watch in watchlist.get_watches().values():
+        connected = await loop.run_in_executor(None, _mqtt_pub.connect)
+        print(f"[MQTT] connect() returned: {connected}", flush=True)
+        await asyncio.sleep(2.0)  # wait for CONNACK
+        watches = watchlist.get_watches()
+        print(f"[MQTT] Publishing Discovery for {len(watches)} watch(es)...", flush=True)
+        for watch in watches.values():
             _mqtt_pub.publish_discovery(watch)
         await _publish_all_watch_states()
+        print("[MQTT] Startup complete", flush=True)
+    else:
+        print("[MQTT] Disabled (mqtt_host is empty)", flush=True)
 
     task = asyncio.create_task(_auto_refresh_loop(cfg))
     yield

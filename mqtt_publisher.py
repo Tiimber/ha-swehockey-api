@@ -176,8 +176,11 @@ class MQTTPublisher:
 
     def connect(self) -> bool:
         """Connect to the broker and start the network loop in a background thread."""
+        print(f"[MQTT] Connecting to {self._host}:{self._port} "
+              f"(user={self._username or 'anonymous'})...", flush=True)
         try:
             import paho.mqtt.client as mqtt  # imported lazily so missing lib is non-fatal
+            print(f"[MQTT] paho-mqtt found, version {mqtt.__version__}", flush=True)
 
             # Support both paho 1.x (no CallbackAPIVersion) and 2.x
             try:
@@ -193,13 +196,24 @@ class MQTTPublisher:
             def on_connect(client, userdata, flags, rc):
                 if rc == 0:
                     self._connected = True
+                    print(f"[MQTT] Connected to {self._host}:{self._port}", flush=True)
                     logger.info("MQTT connected to %s:%s", self._host, self._port)
                 else:
-                    logger.error("MQTT connect failed, rc=%s", rc)
+                    rc_messages = {
+                        1: "incorrect protocol version",
+                        2: "invalid client ID",
+                        3: "broker unavailable",
+                        4: "bad username or password",
+                        5: "not authorised",
+                    }
+                    reason = rc_messages.get(rc, f"unknown rc={rc}")
+                    print(f"[MQTT] ERROR: Connection refused – {reason}", flush=True)
+                    logger.error("MQTT connect failed, rc=%s (%s)", rc, reason)
 
             def on_disconnect(client, userdata, rc):
                 self._connected = False
                 if rc != 0:
+                    print(f"[MQTT] Disconnected unexpectedly: rc={rc}", flush=True)
                     logger.warning("MQTT disconnected unexpectedly: rc=%s", rc)
 
             client.on_connect = on_connect
@@ -209,7 +223,12 @@ class MQTTPublisher:
             client.loop_start()
             self._client = client
             return True
+        except ImportError:
+            print("[MQTT] ERROR: paho-mqtt is not installed – rebuild the add-on", flush=True)
+            logger.error("paho-mqtt not installed")
+            return False
         except Exception as exc:
+            print(f"[MQTT] ERROR: {exc}", flush=True)
             logger.error("MQTT connect error: %s", exc)
             return False
 
@@ -353,6 +372,11 @@ class MQTTPublisher:
         tracked[watch_id] = {"slug": slug, "discovery_topics": discovery_topics}
         _save_entities(tracked)
 
+        print(
+            f"[MQTT] Discovery published: {display_name} ({watch_id}) "
+            f"slug={slug} → {len(discovery_topics)} entities",
+            flush=True,
+        )
         logger.info(
             "MQTT Discovery published: %s (%s) → %d entities",
             display_name,
