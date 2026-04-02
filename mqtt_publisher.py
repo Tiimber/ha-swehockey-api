@@ -147,6 +147,16 @@ def _build_state(status_payload: dict) -> dict:
     if last_period_scores:
         last_went_ot = len(re.findall(r"\(\d+-\d+\)", last_period_scores)) >= 4
 
+    # Last match today — needed to keep the result on Ulanzi for rest of day
+    last_match_date = last_match.get("date") if last_match else None
+    last_match_today = False
+    if last_match_date:
+        try:
+            now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
+            last_match_today = last_match_date == now_sthlm.strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
     return {
         "status": status,
         "is_playing": is_playing,
@@ -184,9 +194,14 @@ def _build_state(status_payload: dict) -> dict:
             else None
         ),
         "last_opponent": last_match.get("opponent") if last_match else None,
+        "last_home_team": last_match.get("home_team") if last_match else None,
+        "last_away_team": last_match.get("away_team") if last_match else None,
+        "last_home_score": last_match.get("home_score") if last_match else None,
+        "last_away_score": last_match.get("away_score") if last_match else None,
         "last_won": last_match.get("won") if last_match else None,
         "last_period_scores": last_period_scores,
         "last_went_ot": last_went_ot,
+        "last_match_today": last_match_today,
     }
 
 

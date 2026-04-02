@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_3400
+ARG CACHEBUST=20260402_3500
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -775,7 +775,8 @@ _T = """\
     - condition: template
       value_template: >
         {{ states('sensor.hockeylive___SLUG___status') in ['upcoming','idle']
-           and not state_attr('sensor.hockeylive___SLUG___status', 'next_today') }}
+           and not state_attr('sensor.hockeylive___SLUG___status', 'next_today')
+           and not state_attr('sensor.hockeylive___SLUG___status', 'last_match_today') }}
   action:
     - service: mqtt.publish
       data:
@@ -893,6 +894,32 @@ _T = """\
           {%- set dc = '#00C800' if won else '#C80000' -%}
           {%- set oc = dc if ot else '#404040' -%}
           {"icon":"__ICON__","text":[{"t":"{{ ls }}","c":"{{ dc }}"},{"t":" {{ '+' if won else 'x' }}","c":"{{ dc }}"}],"draw":[{"dp":[8,7,"{{ dc }}"]},{"dp":[13,7,"{{ dc }}"]},{"dp":[18,7,"{{ dc }}"]},{"dp":[23,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"duration":30,"lifetime":3600}
+
+- alias: "AWTRIX __NAME__ - Matchresultat idag"
+  id: "awtrix___WID___result_today"
+  trigger:
+    - platform: state
+      entity_id: sensor.hockeylive___SLUG___status
+    - platform: time_pattern
+      minutes: "/10"
+    - platform: homeassistant
+      event: start
+  condition:
+    - condition: template
+      value_template: >
+        {{ state_attr('sensor.hockeylive___SLUG___status', 'last_match_today') == true
+           and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "__PREFIX__/custom/__APP__"
+        payload: >-
+          {%- set won = state_attr('sensor.hockeylive___SLUG___status','last_won') -%}
+          {%- set ls = state_attr('sensor.hockeylive___SLUG___status','last_score') or '-' -%}
+          {%- set ot = state_attr('sensor.hockeylive___SLUG___status','last_went_ot') -%}
+          {%- set dc = '#00C800' if won else '#C80000' -%}
+          {%- set oc = dc if ot else '#404040' -%}
+          {"icon":"__ICON__","text":[{"t":"{{ ls }}","c":"{{ dc }}"},{"t":" {{ '+' if won else 'x' }}","c":"{{ dc }}"}],"draw":[{"dp":[8,7,"{{ dc }}"]},{"dp":[13,7,"{{ dc }}"]},{"dp":[18,7,"{{ dc }}"]},{"dp":[23,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"duration":10,"lifetime":1800}
 
 - alias: "AWTRIX __NAME__ - Rensa vid midnatt"
   id: "awtrix___WID___midnight"
