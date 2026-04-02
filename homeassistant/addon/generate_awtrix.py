@@ -212,7 +212,7 @@ _T = """\
           {%- set ot = state_attr('sensor.hockeylive___SLUG___status','last_went_ot') -%}
           {%- set dc = '#00C800' if won else '#C80000' -%}
           {%- set oc = dc if ot else '#404040' -%}
-          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"{{ hs }}-{{ as_ }}","{{ dc }}"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"#1E3A5F"]},{"dp":[10,7,"#1E3A5F"]},{"dp":[16,7,"#1E3A5F"]},{"dp":[22,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"noScroll":true,"duration":10,"lifetime":1800}
+          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"{{ hs }}-{{ as_ }}","{{ dc }}"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"{{ dc }}"]},{"dp":[10,7,"{{ dc }}"]},{"dp":[16,7,"{{ dc }}"]},{"dp":[22,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"noScroll":true,"duration":10,"lifetime":1800}
 
 - alias: "AWTRIX __NAME__ - Rensa vid midnatt"
   id: "awtrix___WID___midnight"

@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_4200
+ARG CACHEBUST=20260402_4300
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -953,7 +953,7 @@ _T = """\
           {%- set ot = state_attr('sensor.hockeylive___SLUG___status','last_went_ot') -%}
           {%- set dc = '#00C800' if won else '#C80000' -%}
           {%- set oc = dc if ot else '#404040' -%}
-          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"{{ hs }}-{{ as_ }}","{{ dc }}"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"#1E3A5F"]},{"dp":[10,7,"#1E3A5F"]},{"dp":[16,7,"#1E3A5F"]},{"dp":[22,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"noScroll":true,"duration":10,"lifetime":1800}
+          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"{{ hs }}-{{ as_ }}","{{ dc }}"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"{{ dc }}"]},{"dp":[10,7,"{{ dc }}"]},{"dp":[16,7,"{{ dc }}"]},{"dp":[22,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"noScroll":true,"duration":10,"lifetime":1800}
 
 - alias: "AWTRIX __NAME__ - Rensa vid midnatt"
   id: "awtrix___WID___midnight"
@@ -1114,7 +1114,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260402_4200
+ENV BUILD_ID=20260402_4300
 
 EXPOSE 8080
 
