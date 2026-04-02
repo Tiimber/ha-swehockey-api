@@ -259,7 +259,9 @@ async def lifespan(app: FastAPI):
         print(f"[MQTT] connect() returned: {connected}", flush=True)
         await asyncio.sleep(2.0)  # wait for CONNACK
         watches = watchlist.get_watches()
-        print(f"[MQTT] Publishing Discovery for {len(watches)} watch(es)...", flush=True)
+        print(
+            f"[MQTT] Publishing Discovery for {len(watches)} watch(es)...", flush=True
+        )
         for watch in watches.values():
             _mqtt_pub.publish_discovery(watch)
         await _publish_all_watch_states()

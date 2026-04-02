@@ -176,10 +176,14 @@ class MQTTPublisher:
 
     def connect(self) -> bool:
         """Connect to the broker and start the network loop in a background thread."""
-        print(f"[MQTT] Connecting to {self._host}:{self._port} "
-              f"(user={self._username or 'anonymous'})...", flush=True)
+        print(
+            f"[MQTT] Connecting to {self._host}:{self._port} "
+            f"(user={self._username or 'anonymous'})...",
+            flush=True,
+        )
         try:
             import paho.mqtt.client as mqtt  # imported lazily so missing lib is non-fatal
+
             print(f"[MQTT] paho-mqtt found, version {mqtt.__version__}", flush=True)
 
             # Support both paho 1.x (no CallbackAPIVersion) and 2.x
@@ -224,7 +228,10 @@ class MQTTPublisher:
             self._client = client
             return True
         except ImportError:
-            print("[MQTT] ERROR: paho-mqtt is not installed – rebuild the add-on", flush=True)
+            print(
+                "[MQTT] ERROR: paho-mqtt is not installed – rebuild the add-on",
+                flush=True,
+            )
             logger.error("paho-mqtt not installed")
             return False
         except Exception as exc:
