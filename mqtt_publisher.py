@@ -343,10 +343,10 @@ class MQTTPublisher:
         cleared = 0
         for comp, sfx in _LEGACY_SUFFIXES:
             for old_id in [
-                f"{slug}_{slug}_{sfx}",  # double-slug (HA auto-gen without object_id)
-                f"{slug}_{sfx}",  # single-slug without hockeylive_ prefix
+                f"{slug}_{slug}_{sfx}",          # double-slug (HA auto-gen without object_id)
+                f"{slug}_{sfx}",                 # single-slug without hockeylive_ prefix
                 f"hockeylive_{watch_id}_{sfx}",  # unique_id-based (very old format)
-                f"hockeylive_{slug}_{sfx}",  # object_id-based with old unique_id (v2.6-v2.7)
+                f"hockeylive_{slug}_{sfx}",      # object_id topic, uid2_ era (v2.6-v2.7)
             ]:
                 self._pub(f"{DISCOVERY_PREFIX}/{comp}/{old_id}/config", "")
                 cleared += 1
@@ -356,7 +356,9 @@ class MQTTPublisher:
 
         device = {
             "identifiers": [f"hockeylive_{watch_id}"],
-            "name": display_name,
+            # Prefix device name with "HockeyLive " so HA slugifies the device name
+            # to "hockeylive_{slug}" — entity_ids become hockeylive_{slug}_{suffix}.
+            "name": f"HockeyLive {display_name}",
             "manufacturer": "HockeyLive",
             "model": "Ice Hockey Watch",
         }
@@ -365,9 +367,9 @@ class MQTTPublisher:
         def _base(suffix: str, component: str = "sensor") -> tuple[str, str, dict]:
             object_id = f"hockeylive_{slug}_{suffix}"
             cfg: dict = {
-                # uid2_ prefix forces HA to treat these as new entities, breaking
-                # the mapping from old wrongly-named entities (hockeylive_{watch_id}_*)
-                "unique_id": f"uid2_{watch_id}_{suffix}",
+                # uid3_ prefix: forces new entity_id creation (uid2_ entries still exist
+                # in HA registry mapped to wrong entity_ids from previous versions)
+                "unique_id": f"uid3_{watch_id}_{suffix}",
                 "object_id": object_id,
                 "state_topic": state_t,
                 "availability_topic": avail_t,
@@ -381,7 +383,7 @@ class MQTTPublisher:
             (
                 *_base("status"),
                 {
-                    "name": f"{display_name} Status",
+                    "name": "Status",
                     "value_template": "{{ value_json.status }}",
                     "icon": "mdi:hockey-sticks",
                     "json_attributes_topic": state_t,
@@ -391,7 +393,7 @@ class MQTTPublisher:
             (
                 *_base("live", "binary_sensor"),
                 {
-                    "name": f"{display_name} Live",
+                    "name": "Live",
                     "value_template": "{{ value_json.is_playing | lower }}",
                     "payload_on": "true",
                     "payload_off": "false",
@@ -403,7 +405,7 @@ class MQTTPublisher:
             (
                 *_base("score"),
                 {
-                    "name": f"{display_name} Score",
+                    "name": "Score",
                     "value_template": "{{ value_json.score }}",
                     "icon": "mdi:scoreboard",
                 },
@@ -412,7 +414,7 @@ class MQTTPublisher:
             (
                 *_base("period"),
                 {
-                    "name": f"{display_name} Period",
+                    "name": "Period",
                     "value_template": "{{ value_json.period_label or '-' }}",
                     "icon": "mdi:timer",
                 },
@@ -421,7 +423,7 @@ class MQTTPublisher:
             (
                 *_base("next_match"),
                 {
-                    "name": f"{display_name} Next Match",
+                    "name": "Next Match",
                     "value_template": (
                         "{% if value_json.next_datetime %}"
                         "{{ value_json.next_datetime[:16] | replace('T', ' ') }}"
@@ -434,7 +436,7 @@ class MQTTPublisher:
             (
                 *_base("last_result"),
                 {
-                    "name": f"{display_name} Last Result",
+                    "name": "Last Result",
                     "value_template": "{{ value_json.last_score or '-' }}",
                     "icon": "mdi:history",
                 },
@@ -443,7 +445,7 @@ class MQTTPublisher:
             (
                 *_base("last_goal_scorer"),
                 {
-                    "name": f"{display_name} Last Goal Scorer",
+                    "name": "Last Goal Scorer",
                     "value_template": "{{ value_json.last_goal_scorer or '-' }}",
                     "icon": "mdi:hockey-puck",
                 },
@@ -452,7 +454,7 @@ class MQTTPublisher:
             (
                 *_base("goals_count"),
                 {
-                    "name": f"{display_name} Goals",
+                    "name": "Goals",
                     "value_template": "{{ value_json.goals_count }}",
                     "icon": "mdi:counter",
                     "state_class": "measurement",
@@ -462,7 +464,7 @@ class MQTTPublisher:
             (
                 *_base("overtime", "binary_sensor"),
                 {
-                    "name": f"{display_name} Overtime",
+                    "name": "Overtime",
                     "value_template": (
                         "{{ (value_json.is_overtime or value_json.is_shootout) | lower }}"
                     ),
