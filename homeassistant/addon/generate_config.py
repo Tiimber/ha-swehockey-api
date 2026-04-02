@@ -76,9 +76,14 @@ def main() -> None:
 
     # ── Write config.yaml (first watch = default team for root endpoints) ──────
     first = watches[0]
+    raw_first = first["season_ids"]
+    if isinstance(raw_first, str):
+        first_ids = sorted(int(s.strip()) for s in raw_first.split(",") if s.strip())
+    else:
+        first_ids = sorted(int(s) for s in raw_first)
     config = {
         "team": first["team"],
-        "season_ids": sorted(int(s) for s in first["season_ids"]),
+        "season_ids": first_ids,
         "port": 8080,
     }
     CONFIG_FILE.write_text(
