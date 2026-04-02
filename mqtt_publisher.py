@@ -327,15 +327,20 @@ class MQTTPublisher:
         # "{device_slug}_{device_slug}_{suffix}" or "{slug}_{suffix}".
         # Publishing empty retained payload removes them from HA and the broker.
         _SUFFIXES = [
-            ("sensor", "status"), ("binary_sensor", "live"), ("sensor", "score"),
-            ("sensor", "period"), ("sensor", "next_match"), ("sensor", "last_result"),
-            ("sensor", "last_goal_scorer"), ("sensor", "goals_count"),
+            ("sensor", "status"),
+            ("binary_sensor", "live"),
+            ("sensor", "score"),
+            ("sensor", "period"),
+            ("sensor", "next_match"),
+            ("sensor", "last_result"),
+            ("sensor", "last_goal_scorer"),
+            ("sensor", "goals_count"),
             ("binary_sensor", "overtime"),
         ]
         for comp, sfx in _SUFFIXES:
             for old_id in [
-                f"{slug}_{slug}_{sfx}",   # double-slug (HA auto-gen without object_id)
-                f"{slug}_{sfx}",           # single-slug without hockeylive_ prefix
+                f"{slug}_{slug}_{sfx}",  # double-slug (HA auto-gen without object_id)
+                f"{slug}_{sfx}",  # single-slug without hockeylive_ prefix
                 f"hockeylive_{watch_id}_{sfx}",  # unique_id-based (very old format)
             ]:
                 self._pub(f"{DISCOVERY_PREFIX}/{comp}/{old_id}/config", "")

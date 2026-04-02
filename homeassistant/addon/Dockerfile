@@ -12,7 +12,7 @@ FROM python:3.12-slim
 LABEL \
   io.hass.name="HockeyLive API" \
   io.hass.description="Swedish ice hockey live scores from swehockey.se" \
-  io.hass.version="2.7.1" \
+  io.hass.version="2.7.2" \
   io.hass.arch="aarch64|amd64|armv7"
 
 # System deps: libxml2/libxslt for lxml, curl for source download
@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_2500
+ARG CACHEBUST=20260402_2600
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
