@@ -326,7 +326,8 @@ class MQTTPublisher:
         # Old code without object_id made HA auto-generate entity_id as
         # "{device_slug}_{device_slug}_{suffix}" or "{slug}_{suffix}".
         # Publishing empty retained payload removes them from HA and the broker.
-        _SUFFIXES = [
+        # Keep ALL historical suffixes here – never remove, only add new ones.
+        _LEGACY_SUFFIXES = [
             ("sensor", "status"),
             ("binary_sensor", "live"),
             ("sensor", "score"),
@@ -335,15 +336,21 @@ class MQTTPublisher:
             ("sensor", "last_result"),
             ("sensor", "last_goal_scorer"),
             ("sensor", "goals_count"),
+            ("sensor", "goals"),          # old name before → goals_count
+            ("sensor", "last_match"),     # old name before → last_result
             ("binary_sensor", "overtime"),
         ]
-        for comp, sfx in _SUFFIXES:
+        cleared = 0
+        for comp, sfx in _LEGACY_SUFFIXES:
             for old_id in [
                 f"{slug}_{slug}_{sfx}",  # double-slug (HA auto-gen without object_id)
                 f"{slug}_{sfx}",  # single-slug without hockeylive_ prefix
                 f"hockeylive_{watch_id}_{sfx}",  # unique_id-based (very old format)
             ]:
                 self._pub(f"{DISCOVERY_PREFIX}/{comp}/{old_id}/config", "")
+                cleared += 1
+        print(f"[MQTT] Legacy cleanup: sent {cleared} empty retained msgs for {slug}")
+        logger.info("MQTT legacy cleanup: %d topics cleared for %s", cleared, slug)
         # -----------------------------------------------------------------
 
         device = {
