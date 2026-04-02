@@ -70,7 +70,9 @@ _T = """\
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
-          {"icon":"__ICON__","text":[{"t":"Nasta: ","c":"888888"},{"t":"{{ (state_attr('sensor.hockeylive___SLUG___status','next_datetime') or '')[:10]|replace('-','/') }}","c":"FFFFFF"}],"duration":10,"lifetime":120}
+          {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
+          {%- set day = ((ndt or 'x')[8:10]|int)|string if ndt else '?' -%}
+          {"icon":"__ICON__","draw":[{"df":[9,0,9,2,"#FF0000"]},{"df":[9,2,9,6,"#FFFFFF"]},{"dt":[10,2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
