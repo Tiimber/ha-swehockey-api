@@ -12,7 +12,7 @@ FROM python:3.12-slim
 LABEL \
   io.hass.name="HockeyLive API" \
   io.hass.description="Swedish ice hockey live scores from swehockey.se" \
-  io.hass.version="2.3.0" \
+  io.hass.version="2.4.0" \
   io.hass.arch="aarch64|amd64|armv7"
 
 # System deps: libxml2/libxslt for lxml, curl for source download
@@ -81,8 +81,8 @@ def main():
         wid = _generate_id(team, season_ids)
         new_entries[wid] = {"id": wid, "team": team, "season_ids": season_ids}
 
-    merged = {**existing, **new_entries}
-    WATCHLIST_FILE.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+    merged = {**existing.get("watches", existing), **new_entries}
+    WATCHLIST_FILE.write_text(json.dumps({"watches": merged}, ensure_ascii=False, indent=2), encoding="utf-8")
     added = [e for e in new_entries if e not in existing]
     print(f"[generate_config] watchlist.json: {len(merged)} entries" +
           (f" ({len(added)} new)" if added else " (no changes)"))

@@ -48,7 +48,9 @@ def main() -> None:
     existing: dict = {}
     if WATCHLIST_FILE.exists():
         try:
-            existing = json.loads(WATCHLIST_FILE.read_text(encoding="utf-8"))
+            raw = json.loads(WATCHLIST_FILE.read_text(encoding="utf-8"))
+            # Support both {"watches": {...}} and flat {id: {...}} formats
+            existing = raw.get("watches", raw) if isinstance(raw, dict) else {}
         except json.JSONDecodeError:
             existing = {}
 
@@ -56,7 +58,6 @@ def main() -> None:
     for w in watches:
         team = w["team"]
         raw = w["season_ids"]
-        # season_ids arrives as a comma-separated string from the HA UI
         if isinstance(raw, str):
             season_ids = sorted(int(s.strip()) for s in raw.split(",") if s.strip())
         else:
@@ -66,7 +67,7 @@ def main() -> None:
 
     merged = {**existing, **new_entries}
     WATCHLIST_FILE.write_text(
-        json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps({"watches": merged}, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     added = [e for e in new_entries if e not in existing]
     print(
