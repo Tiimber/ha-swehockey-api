@@ -3,7 +3,7 @@
 # Docs: https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: "HockeyLive API"
-version: "2.6.0"
+version: "2.7.0"
 slug: "hockeylive"
 description: >-
   Swedish ice hockey live scores, goals, penalties and schedule from
@@ -30,6 +30,7 @@ ports_description:
 
 # Add-on options shown in the UI
 options:
+  awtrix_prefix: ""
   mqtt_host: "core-mosquitto"
   mqtt_port: 1883
   mqtt_username: ""
@@ -38,8 +39,11 @@ options:
     - name: "Färjestad BK"
       team: "Färjestad BK"
       season_ids: "18263, 19791"
+      awtrix: false
+      awtrix_icon: ""
 
 schema:
+  awtrix_prefix: str
   mqtt_host: str
   mqtt_port: int
   mqtt_username: str
@@ -48,9 +52,14 @@ schema:
     - name: str
       team: str
       season_ids: str
+      awtrix: bool
+      awtrix_icon: str?
 
 # Persistent storage – watchlist.json and generated config land here
 map:
   - type: data
     path: /data
+    read_only: false
+  - type: config
+    path: /config
     read_only: false
