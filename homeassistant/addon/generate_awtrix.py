@@ -58,6 +58,8 @@ _T = """\
       entity_id: sensor.hockeylive___SLUG___status
     - platform: time_pattern
       minutes: "/30"
+    - platform: homeassistant
+      event: start
   condition:
     - condition: template
       value_template: >
@@ -77,6 +79,8 @@ _T = """\
       minutes: "/1"
     - platform: state
       entity_id: sensor.hockeylive___SLUG___status
+    - platform: homeassistant
+      event: start
   condition:
     - condition: template
       value_template: >
@@ -106,6 +110,10 @@ _T = """\
       entity_id: sensor.hockeylive___SLUG___status
     - platform: state
       entity_id: binary_sensor.hockeylive___SLUG___live
+    - platform: time_pattern
+      minutes: "/1"
+    - platform: homeassistant
+      event: start
   condition:
     - condition: state
       entity_id: binary_sensor.hockeylive___SLUG___live
