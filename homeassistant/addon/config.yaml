@@ -52,7 +52,7 @@ schema:
     - name: str
       team: str
       season_ids: str
-      awtrix: bool
+      awtrix: bool?
       awtrix_icon: str?
 
 # Persistent storage – watchlist.json and generated config land here
