@@ -370,12 +370,23 @@ _MISCONDUCT_RE = re.compile(r"matchstraff|game\s*misconduct", re.I)
 # Valid Swedish/English period header tokens
 _PERIOD_HEADERS: dict[str, str] = {
     # Numeric (Swedish site older format)
-    "1": "P1", "2": "P2", "3": "P3",
+    "1": "P1",
+    "2": "P2",
+    "3": "P3",
     # English full names (current swehockey.se format)
-    "1ST PERIOD": "P1", "2ND PERIOD": "P2", "3RD PERIOD": "P3",
+    "1ST PERIOD": "P1",
+    "2ND PERIOD": "P2",
+    "3RD PERIOD": "P3",
     # Overtime / shootout variants
-    "OT": "OT", "OT5": "OT", "FLD": "OT", "FÖRL": "OT", "OVERTIME": "OT",
-    "SO": "SO", "PSO": "SO", "STRAFFAR": "SO", "SHOOTOUT": "SO",
+    "OT": "OT",
+    "OT5": "OT",
+    "FLD": "OT",
+    "FÖRL": "OT",
+    "OVERTIME": "OT",
+    "SO": "SO",
+    "PSO": "SO",
+    "STRAFFAR": "SO",
+    "SHOOTOUT": "SO",
 }
 
 
@@ -631,10 +642,10 @@ def _parse_game_events(html: str) -> dict:
     # bottom). We track "first_period" and "first_time_str" (first seen while
     # iterating = most recent in the game) as the current game state.
     raw_events: list[dict] = []
-    last_time_str: Optional[str] = None   # will be oldest event (last iterated)
+    last_time_str: Optional[str] = None  # will be oldest event (last iterated)
     first_time_str: Optional[str] = None  # will be newest event (first iterated)
     last_period: Optional[str] = None
-    first_period: Optional[str] = None    # current period (newest-first ordering)
+    first_period: Optional[str] = None  # current period (newest-first ordering)
 
     for table in soup.find_all("table"):
         current_period_label: Optional[str] = None
