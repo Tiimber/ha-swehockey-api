@@ -249,14 +249,17 @@ def main() -> None:
     }
 
     enabled = []
+    disabled = []  # watches with awtrix: false – need their app cleared
     for wid, w in watches.items():
         name = w.get("name") or w.get("team", "")
         ow = opt_map.get(name, {})
         if ow.get("awtrix"):
             enabled.append({**w, "awtrix_icon": (ow.get("awtrix_icon") or "").strip()})
+        else:
+            disabled.append({**w})
 
-    if not enabled:
-        print("[generate_awtrix] No watches with awtrix: true – skipping")
+    if not enabled and not disabled:
+        print("[generate_awtrix] No watches configured – skipping")
         return
 
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -273,6 +276,34 @@ def main() -> None:
                 WID=w["id"],
                 SLUG=slug,
                 ICON=icon,
+                APP=f"hockey_{slug}",
+                PREFIX=prefix,
+            )
+        )
+
+    # Clear automations for disabled (awtrix: false) watches
+    _T_CLEAR = """\
+- alias: "AWTRIX __NAME__ - Rensa (inaktiverad)"
+  id: "awtrix___WID___disabled_clear"
+  trigger:
+    - platform: homeassistant
+      event: start
+    - platform: time_pattern
+      hours: "/1"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "__PREFIX__/custom/__APP__"
+        payload: ""
+"""
+    for w in disabled:
+        name = w.get("name") or w["team"]
+        slug = _slugify(name)
+        automation_blocks.append(
+            _sub(
+                _T_CLEAR,
+                NAME=name,
+                WID=w["id"],
                 APP=f"hockey_{slug}",
                 PREFIX=prefix,
             )
@@ -304,7 +335,7 @@ def main() -> None:
         indented.append("")
 
     OUT_FILE.write_text(header + "\n" + "\n".join(indented), encoding="utf-8")
-    print(f"[generate_awtrix] {len(enabled)} watch(es) → {OUT_FILE}")
+    print(f"[generate_awtrix] {len(enabled)} enabled + {len(disabled)} disabled → {OUT_FILE}")
     print(
         f"[generate_awtrix] Prefix: {prefix}, Watches: {[w.get('name') or w['team'] for w in enabled]}"
     )
