@@ -308,8 +308,10 @@ class MQTTPublisher:
         )
         try:
             import paho.mqtt.client as mqtt  # imported lazily so missing lib is non-fatal
+            import paho.mqtt as _paho_root
 
-            print(f"[MQTT] paho-mqtt found, version {mqtt.__version__}", flush=True)
+            _ver = getattr(_paho_root, "__version__", "unknown")
+            print(f"[MQTT] paho-mqtt found, version {_ver}", flush=True)
 
             # Support both paho 1.x (no CallbackAPIVersion) and 2.x
             try:
