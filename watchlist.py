@@ -50,9 +50,18 @@ def _watchlist_path() -> Path:
     return Path("watchlist.json")
 
 
-def generate_id(team: str, season_ids: list[int]) -> str:
-    """Return a deterministic 8-char hex ID for a team+season_ids combination."""
-    key = f"{team.lower()}:{sorted(season_ids)}"
+def generate_id(team: str, season_ids: list[int], name: Optional[str] = None) -> str:
+    """
+    Return a deterministic 8-char hex ID.
+
+    If *name* is provided (a user-chosen alias such as "HV71 SHL"), the ID is
+    based solely on that name – so changing season_ids later preserves the ID.
+    Otherwise falls back to the original team + sorted(season_ids) hash.
+    """
+    if name and name.strip():
+        key = name.strip().lower()
+    else:
+        key = f"{team.lower()}:{sorted(season_ids)}"
     return hashlib.sha1(key.encode()).hexdigest()[:8]
 
 
@@ -116,24 +125,32 @@ def get_watch(watch_id: str) -> Optional[dict]:
     return _load()["watches"].get(watch_id)
 
 
-def add_watch(team: str, season_ids: list[int]) -> tuple[str, bool]:
+def add_watch(
+    team: str, season_ids: list[int], name: Optional[str] = None
+) -> tuple[str, bool]:
     """
     Add a watch entry for team across the given season_ids.
-    The ID is deterministic: re-posting the same team+season_ids returns the
-    same ID with was_created=False.
+
+    If *name* is provided, it is stored and used as the stable ID key – so
+    updating season_ids in the future preserves the ID (and all automations).
+    The ID is deterministic: re-posting the same name/team+season_ids returns
+    the same ID with was_created=False.
 
     Returns (watch_id, was_created).
     """
-    watch_id = generate_id(team, season_ids)
+    watch_id = generate_id(team, season_ids, name)
     data = _load()
     watches: dict = data.setdefault("watches", {})
     if watch_id in watches:
         return watch_id, False
-    watches[watch_id] = {
+    entry: dict = {
         "id": watch_id,
         "team": team,
         "season_ids": sorted(season_ids),
     }
+    if name and name.strip():
+        entry["name"] = name.strip()
+    watches[watch_id] = entry
     _save(data)
     return watch_id, True
 
@@ -169,4 +186,14 @@ def all_watched_season_ids() -> set[int]:
     ids: set[int] = set()
     for w in get_watches().values():
         ids.update(w["season_ids"])
+    return ids
+
+
+def get_season_ids_for_team(team: str) -> set[int]:
+    """Return all season_ids watched for *team* (case-insensitive)."""
+    tl = team.lower()
+    ids: set[int] = set()
+    for w in get_watches().values():
+        if w["team"].lower() == tl:
+            ids.update(w["season_ids"])
     return ids

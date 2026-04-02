@@ -30,13 +30,23 @@ ports_description:
 
 # Add-on options shown in the UI
 options:
+  mqtt_host: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
   watches:
-    - team: "Färjestad BK"
+    - name: "Färjestad BK"
+      team: "Färjestad BK"
       season_ids: "18263, 19791"
 
 schema:
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_username: str
+  mqtt_password: str
   watches:
-    - team: str
+    - name: str?
+      team: str
       season_ids: str
 
 # Persistent storage – watchlist.json and generated config land here

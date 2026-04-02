@@ -42,6 +42,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import config as cfg_module
+import mqtt_publisher
 import scraper
 import watchlist
 
@@ -50,6 +51,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# MQTT publisher – None if mqtt_host is not configured
+_mqtt_pub: Optional[mqtt_publisher.MQTTPublisher] = None
 
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 
@@ -187,6 +191,19 @@ async def _ensure_fresh(cfg: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _publish_all_watch_states() -> None:
+    """Push current state to MQTT for every watch (only sends on change)."""
+    if _mqtt_pub is None:
+        return
+    cfg = cfg_module.get()
+    for watch_id, watch in watchlist.get_watches().items():
+        try:
+            payload = _team_status_payload(watch["team"], watch["season_ids"], cfg)
+            _mqtt_pub.publish_state(watch_id, payload)
+        except Exception as exc:
+            logger.debug("MQTT state error for watch %s: %s", watch_id, exc)
+
+
 async def _auto_refresh_loop(cfg: dict) -> None:
     while True:
         ttl = _global_ttl()
@@ -198,6 +215,9 @@ async def _auto_refresh_loop(cfg: dict) -> None:
                 await _refresh_season(sid)
             except Exception as exc:
                 logger.error("Auto-refresh season %d error: %s", sid, exc)
+
+        # Push MQTT state updates after every scrape cycle
+        await _publish_all_watch_states()
 
         # When no future games remain, hint about new seasons
         now = datetime.now(STOCKHOLM_TZ)
@@ -226,12 +246,26 @@ async def _auto_refresh_loop(cfg: dict) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _mqtt_pub
     cfg = cfg_module.get()
     for sid in _all_known_season_ids(cfg):
         await _refresh_season(sid)
+
+    # Connect to MQTT broker if configured
+    _mqtt_pub = mqtt_publisher.create(cfg)
+    if _mqtt_pub is not None:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _mqtt_pub.connect)
+        await asyncio.sleep(1.5)  # wait for CONNACK
+        for watch in watchlist.get_watches().values():
+            _mqtt_pub.publish_discovery(watch)
+        await _publish_all_watch_states()
+
     task = asyncio.create_task(_auto_refresh_loop(cfg))
     yield
     task.cancel()
+    if _mqtt_pub is not None:
+        _mqtt_pub.disconnect()
 
 
 app = FastAPI(
@@ -826,6 +860,7 @@ async def list_watches():
 
 
 class WatchRequest(BaseModel):
+    name: Optional[str] = None  # stable alias; ID is based on this if provided
     team: str
     season_ids: list[int]
 
@@ -877,7 +912,15 @@ async def add_watch(req: WatchRequest):
             # Extremely unlikely, but guard against mismatched spelling
             canonical = found  # accept later spelling without crashing
 
-    watch_id, created = watchlist.add_watch(canonical, req.season_ids)
+    watch_id, created = watchlist.add_watch(canonical, req.season_ids, req.name)
+    if created and _mqtt_pub is not None:
+        watch_entry = watchlist.get_watch(watch_id)
+        _mqtt_pub.publish_discovery(watch_entry)
+        try:
+            state_payload = _team_status_payload(canonical, req.season_ids, cfg)
+            _mqtt_pub.publish_state(watch_id, state_payload)
+        except Exception as exc:
+            logger.debug("MQTT initial state error for %s: %s", watch_id, exc)
     season_names = [
         {"season_id": sid, "season_name": _schedule_cache.get(sid, {}).get("name")}
         for sid in sorted(req.season_ids)
@@ -904,6 +947,8 @@ async def remove_watch(watch_id: str):
     if watch is None:
         raise HTTPException(status_code=404, detail=f"Watch ID '{watch_id}' not found.")
     watchlist.remove_watch(watch_id)
+    if _mqtt_pub is not None:
+        _mqtt_pub.remove_watch(watch_id)
     return {
         "removed": True,
         "id": watch_id,

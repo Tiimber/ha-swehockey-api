@@ -12,7 +12,7 @@ FROM python:3.12-slim
 LABEL \
   io.hass.name="HockeyLive API" \
   io.hass.description="Swedish ice hockey live scores from swehockey.se" \
-  io.hass.version="2.4.0" \
+  io.hass.version="2.5.0" \
   io.hass.arch="aarch64|amd64|armv7"
 
 # System deps: libxml2/libxslt for lxml, curl for source download
@@ -48,8 +48,11 @@ OPTIONS_FILE = Path("/data/options.json")
 CONFIG_FILE  = Path("/data/config.yaml")
 WATCHLIST_FILE = Path("/data/watchlist.json")
 
-def _generate_id(team, season_ids):
-    key = f"{team.lower()}:{sorted(season_ids)}"
+def _generate_id(team, season_ids, name=None):
+    if name and name.strip():
+        key = name.strip().lower()
+    else:
+        key = f"{team.lower()}:{sorted(season_ids)}"
     return hashlib.sha1(key.encode()).hexdigest()[:8]
 
 def main():
@@ -66,22 +69,27 @@ def main():
     existing = {}
     if WATCHLIST_FILE.exists():
         try:
-            existing = json.loads(WATCHLIST_FILE.read_text(encoding="utf-8"))
+            raw = json.loads(WATCHLIST_FILE.read_text(encoding="utf-8"))
+            existing = raw.get("watches", raw) if isinstance(raw, dict) else {}
         except json.JSONDecodeError:
             existing = {}
 
     new_entries = {}
     for w in watches:
+        name = w.get("name") or None
         team = w["team"]
-        raw = w["season_ids"]
-        if isinstance(raw, str):
-            season_ids = sorted(int(s.strip()) for s in raw.split(",") if s.strip())
+        raw_ids = w["season_ids"]
+        if isinstance(raw_ids, str):
+            season_ids = sorted(int(s.strip()) for s in raw_ids.split(",") if s.strip())
         else:
-            season_ids = sorted(int(s) for s in raw)
-        wid = _generate_id(team, season_ids)
-        new_entries[wid] = {"id": wid, "team": team, "season_ids": season_ids}
+            season_ids = sorted(int(s) for s in raw_ids)
+        wid = _generate_id(team, season_ids, name)
+        entry = {"id": wid, "team": team, "season_ids": season_ids}
+        if name:
+            entry["name"] = name
+        new_entries[wid] = entry
 
-    merged = {**existing.get("watches", existing), **new_entries}
+    merged = {**existing, **new_entries}
     WATCHLIST_FILE.write_text(json.dumps({"watches": merged}, ensure_ascii=False, indent=2), encoding="utf-8")
     added = [e for e in new_entries if e not in existing]
     print(f"[generate_config] watchlist.json: {len(merged)} entries" +
@@ -93,9 +101,17 @@ def main():
         first_ids = sorted(int(s.strip()) for s in raw_first.split(",") if s.strip())
     else:
         first_ids = sorted(int(s) for s in raw_first)
-    config = {"team": first["team"], "season_ids": first_ids, "port": 8080}
+    config = {
+        "team": first["team"],
+        "season_ids": first_ids,
+        "port": 8080,
+        "mqtt_host": options.get("mqtt_host", ""),
+        "mqtt_port": int(options.get("mqtt_port") or 1883),
+        "mqtt_username": options.get("mqtt_username", ""),
+        "mqtt_password": options.get("mqtt_password", ""),
+    }
     CONFIG_FILE.write_text(yaml.dump(config, allow_unicode=True, default_flow_style=False), encoding="utf-8")
-    print(f"[generate_config] config.yaml: team={config['team']!r}, season_ids={config['season_ids']}")
+    print(f"[generate_config] config.yaml: team={config['team']!r}, season_ids={config['season_ids']}, mqtt_host={config['mqtt_host']!r}")
 
 if __name__ == "__main__":
     main()
