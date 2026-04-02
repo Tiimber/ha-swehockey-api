@@ -343,10 +343,10 @@ class MQTTPublisher:
         cleared = 0
         for comp, sfx in _LEGACY_SUFFIXES:
             for old_id in [
-                f"{slug}_{slug}_{sfx}",        # double-slug (HA auto-gen without object_id)
-                f"{slug}_{sfx}",               # single-slug without hockeylive_ prefix
+                f"{slug}_{slug}_{sfx}",  # double-slug (HA auto-gen without object_id)
+                f"{slug}_{sfx}",  # single-slug without hockeylive_ prefix
                 f"hockeylive_{watch_id}_{sfx}",  # unique_id-based (very old format)
-                f"hockeylive_{slug}_{sfx}",    # object_id-based with old unique_id (v2.6-v2.7)
+                f"hockeylive_{slug}_{sfx}",  # object_id-based with old unique_id (v2.6-v2.7)
             ]:
                 self._pub(f"{DISCOVERY_PREFIX}/{comp}/{old_id}/config", "")
                 cleared += 1
