@@ -160,11 +160,13 @@ def _build_state(status_payload: dict) -> dict:
         except Exception:
             pass
 
-    # Last match OT/SO detection from period_scores string e.g. "(2-0)(1-2)(0-1)(1-0)"
+    # Last match OT/SO detection: period_scores is '(0-1, 2-0, 0-1, 1-0)' on
+    # swehockey.se — comma-separated inside ONE set of parens, NOT separate tokens.
+    # >=4 entries means at least one OT period was played.
     last_period_scores = last_match.get("period_scores") if last_match else None
     last_went_ot = False
-    if last_period_scores:
-        last_went_ot = len(re.findall(r"\(\d+-\d+\)", last_period_scores)) >= 4
+    if last_period_scores and last_period_scores.startswith("("):
+        last_went_ot = last_period_scores.count(",") + 1 >= 4
 
     return {
         "status": status,
