@@ -336,8 +336,8 @@ class MQTTPublisher:
             ("sensor", "last_result"),
             ("sensor", "last_goal_scorer"),
             ("sensor", "goals_count"),
-            ("sensor", "goals"),          # old name before → goals_count
-            ("sensor", "last_match"),     # old name before → last_result
+            ("sensor", "goals"),  # old name before → goals_count
+            ("sensor", "last_match"),  # old name before → last_result
             ("binary_sensor", "overtime"),
         ]
         cleared = 0
