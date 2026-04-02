@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_3900
+ARG CACHEBUST=20260402_4000
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -731,6 +731,7 @@ Per watch (when awtrix: true) the following automations are created:
 """
 
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -914,8 +915,8 @@ _T = """\
         payload: >-
           {%- set hl = (state_attr('sensor.hockeylive___SLUG___status','last_home_team') or '?')[0]|upper -%}
           {%- set al = (state_attr('sensor.hockeylive___SLUG___status','last_away_team') or '?')[0]|upper -%}
-          {%- set hs = state_attr('sensor.hockeylive___SLUG___status','last_home_score')|default(0)|int -%}
-          {%- set as_ = state_attr('sensor.hockeylive___SLUG___status','last_away_score')|default(0)|int -%}
+          {%- set hs = state_attr('sensor.hockeylive___SLUG___status','last_home_score')|int(0) -%}
+          {%- set as_ = state_attr('sensor.hockeylive___SLUG___status','last_away_score')|int(0) -%}
           {%- set won = state_attr('sensor.hockeylive___SLUG___status','last_won') -%}
           {%- set ot = state_attr('sensor.hockeylive___SLUG___status','last_went_ot') -%}
           {%- set dc = '#00C800' if won else '#C80000' -%}
@@ -1051,9 +1052,26 @@ def main() -> None:
     print(
         f"[generate_awtrix] Prefix: {prefix}, Watches: {[w.get('name') or w['team'] for w in enabled]}"
     )
-    print(
-        "[generate_awtrix] Reload automations in HA: Developer Tools → YAML → Reload Automations"
-    )
+    # Auto-reload automations via Supervisor API (only available inside the add-on)
+    supervisor_token = os.environ.get("SUPERVISOR_TOKEN")
+    if supervisor_token:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://supervisor/core/api/services/automation/reload",
+                data=b"{}",
+                method="POST",
+            )
+            req.add_header("Authorization", f"Bearer {supervisor_token}")
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                print(f"[generate_awtrix] HA automations reloaded (HTTP {resp.status})")
+        except Exception as exc:
+            print(f"[generate_awtrix] Could not reload automations: {exc}")
+    else:
+        print(
+            "[generate_awtrix] Reload automations in HA: Developer Tools → YAML → Reload Automations"
+        )
 
 
 if __name__ == "__main__":
@@ -1064,7 +1082,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260402_3900
+ENV BUILD_ID=20260402_4000
 
 EXPOSE 8080
 
