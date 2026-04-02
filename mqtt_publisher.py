@@ -114,9 +114,28 @@ def _build_state(status_payload: dict) -> dict:
     last_match = status_payload.get("last_match")
     is_playing = live.get("is_playing", False)
 
+    # Compute last_match_today early — drives status logic
+    last_match_date = last_match.get("date") if last_match else None
+    last_match_today = False
+    if last_match_date:
+        try:
+            now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
+            last_match_today = last_match_date == now_sthlm.strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+    # Status and main score
     if is_playing:
         status = "live"
         score = f"{live.get('home_score', 0)}\u2013{live.get('away_score', 0)}"
+    elif last_match_today:
+        # Game finished today — keep showing result until midnight
+        status = "finished_today"
+        score = (
+            f"{last_match['home_score']}\u2013{last_match['away_score']}"
+            if last_match and last_match.get("home_score") is not None
+            else "\u2013"
+        )
     elif next_match:
         status = "upcoming"
         score = "\u2013"
@@ -146,16 +165,6 @@ def _build_state(status_payload: dict) -> dict:
     last_went_ot = False
     if last_period_scores:
         last_went_ot = len(re.findall(r"\(\d+-\d+\)", last_period_scores)) >= 4
-
-    # Last match today — needed to keep the result on Ulanzi for rest of day
-    last_match_date = last_match.get("date") if last_match else None
-    last_match_today = False
-    if last_match_date:
-        try:
-            now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
-            last_match_today = last_match_date == now_sthlm.strftime("%Y-%m-%d")
-        except Exception:
-            pass
 
     return {
         "status": status,

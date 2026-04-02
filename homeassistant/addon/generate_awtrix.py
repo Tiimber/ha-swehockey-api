@@ -64,8 +64,7 @@ _T = """\
     - condition: template
       value_template: >
         {{ states('sensor.hockeylive___SLUG___status') in ['upcoming','idle']
-           and not state_attr('sensor.hockeylive___SLUG___status', 'next_today')
-           and not state_attr('sensor.hockeylive___SLUG___status', 'last_match_today') }}
+           and not state_attr('sensor.hockeylive___SLUG___status', 'next_today') }}
   action:
     - service: mqtt.publish
       data:
@@ -196,19 +195,21 @@ _T = """\
   condition:
     - condition: template
       value_template: >
-        {{ state_attr('sensor.hockeylive___SLUG___status', 'last_match_today') == true
-           and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
+        {{ states('sensor.hockeylive___SLUG___status') == 'finished_today' }}
   action:
     - service: mqtt.publish
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
+          {%- set hl = (state_attr('sensor.hockeylive___SLUG___status','last_home_team') or '?')[0]|upper -%}
+          {%- set al = (state_attr('sensor.hockeylive___SLUG___status','last_away_team') or '?')[0]|upper -%}
+          {%- set hs = state_attr('sensor.hockeylive___SLUG___status','last_home_score')|default(0)|int -%}
+          {%- set as_ = state_attr('sensor.hockeylive___SLUG___status','last_away_score')|default(0)|int -%}
           {%- set won = state_attr('sensor.hockeylive___SLUG___status','last_won') -%}
-          {%- set ls = state_attr('sensor.hockeylive___SLUG___status','last_score') or '-' -%}
           {%- set ot = state_attr('sensor.hockeylive___SLUG___status','last_went_ot') -%}
           {%- set dc = '#00C800' if won else '#C80000' -%}
           {%- set oc = dc if ot else '#404040' -%}
-          {"icon":"__ICON__","text":[{"t":"{{ ls }}","c":"{{ dc }}"},{"t":" {{ '+' if won else 'x' }}","c":"{{ dc }}"}],"draw":[{"dp":[8,7,"{{ dc }}"]},{"dp":[13,7,"{{ dc }}"]},{"dp":[18,7,"{{ dc }}"]},{"dp":[23,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"duration":10,"lifetime":1800}
+          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"{{ hs }}-{{ as_ }}","{{ dc }}"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"#1E3A5F"]},{"dp":[10,7,"#1E3A5F"]},{"dp":[16,7,"#1E3A5F"]},{"dp":[22,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"noScroll":true,"duration":10,"lifetime":1800}
 
 - alias: "AWTRIX __NAME__ - Rensa vid midnatt"
   id: "awtrix___WID___midnight"
