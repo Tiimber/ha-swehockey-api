@@ -359,7 +359,12 @@ def _live_detail(game: dict) -> dict:
     # games.  When game_id is missing, try the GamesByDate page which always
     # includes it.  Cache the result back into the game dict to avoid a lookup
     # on every subsequent call.
-    if not game_id and game.get("date") and game.get("home_team") and game.get("away_team"):
+    if (
+        not game_id
+        and game.get("date")
+        and game.get("home_team")
+        and game.get("away_team")
+    ):
         game_id = scraper.fetch_game_id_by_date(
             game["date"], game["home_team"], game["away_team"]
         )
