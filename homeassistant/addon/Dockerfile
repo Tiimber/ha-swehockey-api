@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_6100
+ARG CACHEBUST=20260403_6200
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -43,6 +43,8 @@ echo "[HockeyLive] Generating config from add-on options..."
 python3 /app/generate_config.py
 echo "[HockeyLive] Generating AWTRIX automations..."
 python3 /app/generate_awtrix.py
+echo "[HockeyLive] Generating team icons..."
+python3 /app/generate_icons.py
 echo "[HockeyLive] Starting API on port 8080..."
 exec uvicorn app:app --host 0.0.0.0 --port 8080 --workers 1
 EOF
@@ -1164,11 +1166,173 @@ if __name__ == "__main__":
     main()
 AWTRIX_PY_EOF
 
+# Embed generate_icons.py directly — always current, no cache issue
+COPY <<'ICONS_PY_EOF' /app/generate_icons.py
+#!/usr/bin/env python3
+"""
+generate_icons.py — Generate and upload 8×8 team icons to AWTRIX3.
+
+Design: Jersey chest-stripe pattern (8px wide x 8px tall)
+  rows 0-2 : primary color
+  rows 3-4 : secondary color (chest stripe)
+  row  5   : accent color if 3 colors, else primary
+  rows 6-7 : primary color
+
+Upload: POST multipart to http://{awtrix_host}/edit (AWTRIX3 LittleFS editor)
+Icons saved to /data/icons/ regardless of upload.
+"""
+import io, json, re, sys, unicodedata
+from pathlib import Path
+try:
+    from PIL import Image
+except ImportError:
+    print("[generate_icons] Pillow not installed - skipping")
+    sys.exit(0)
+
+TEAM_COLORS = {
+    # SHL
+    "brynas_if":            ("#006633", "#FFD700", None),
+    "brynas":               ("#006633", "#FFD700", None),
+    "djurgardens_if":       ("#00297A", "#CE2029", "#FFD700"),
+    "djurgardens":          ("#00297A", "#CE2029", "#FFD700"),
+    "farjestad_bk":         ("#00542A", "#FFD700", None),
+    "farjestad":            ("#00542A", "#FFD700", None),
+    "frolunda_hc":          ("#6B1D2A", "#FFD700", None),
+    "frolunda":             ("#6B1D2A", "#FFD700", None),
+    "hc_frolunda":          ("#6B1D2A", "#FFD700", None),
+    "hv71":                 ("#000000", "#FFD700", None),
+    "linkoping_hc":         ("#003F6D", "#FFFFFF", None),
+    "linkoping":            ("#003F6D", "#FFFFFF", None),
+    "lulea_hf":             ("#CC0000", "#FFFFFF", "#004080"),
+    "lulea":                ("#CC0000", "#FFFFFF", "#004080"),
+    "malmo_redhawks":       ("#CC0000", "#000000", "#FFFFFF"),
+    "malmo":                ("#CC0000", "#000000", "#FFFFFF"),
+    "modo_hockey":          ("#CC0000", "#FFFFFF", "#000000"),
+    "modo":                 ("#CC0000", "#FFFFFF", "#000000"),
+    "rogle_bk":             ("#CC0000", "#FFFFFF", "#003F7F"),
+    "rogle":                ("#CC0000", "#FFFFFF", "#003F7F"),
+    "skelleftea_aik":       ("#FFD700", "#000000", None),
+    "skelleftea":           ("#FFD700", "#000000", None),
+    "timra_ik":             ("#CC0000", "#FFFFFF", "#000000"),
+    "timra":                ("#CC0000", "#FFFFFF", "#000000"),
+    "orebro_hk":            ("#001B50", "#FFFFFF", "#FFD700"),
+    "orebro":               ("#001B50", "#FFFFFF", "#FFD700"),
+    "vaxjo_lakers":         ("#1E5E3D", "#FFFFFF", "#CC0000"),
+    "vaxjo":                ("#1E5E3D", "#FFFFFF", "#CC0000"),
+    # HockeyAllsvenskan
+    "aik":                  ("#000000", "#FFD700", None),
+    "almtuna_is":           ("#CC0000", "#FFFFFF", None),
+    "almtuna":              ("#CC0000", "#FFFFFF", None),
+    "bik_karlskoga":        ("#003F7F", "#FFD700", None),
+    "karlskoga":            ("#003F7F", "#FFD700", None),
+    "if_bjorkloven":        ("#006633", "#FFFFFF", None),
+    "bjorkloven":           ("#006633", "#FFFFFF", None),
+    "ik_oskarshamn":        ("#003F7F", "#FFFFFF", "#CC0000"),
+    "oskarshamn":           ("#003F7F", "#FFFFFF", "#CC0000"),
+    "karlskrona_hk":        ("#003F7F", "#FFFFFF", None),
+    "karlskrona":           ("#003F7F", "#FFFFFF", None),
+    "kristianstad_ik":      ("#CC0000", "#FFFFFF", "#000000"),
+    "kristianstad":         ("#CC0000", "#FFFFFF", "#000000"),
+    "mora_ik":              ("#003F7F", "#FFD700", None),
+    "mora":                 ("#003F7F", "#FFD700", None),
+    "nybro_vikings_if":     ("#006633", "#CC0000", "#FFFFFF"),
+    "nybro":                ("#006633", "#CC0000", "#FFFFFF"),
+    "tingsryd_aif":         ("#CC0000", "#FFFFFF", None),
+    "tingsryd":             ("#CC0000", "#FFFFFF", None),
+    "vik_vasteras_hk":      ("#00388A", "#FFFFFF", "#FFD700"),
+    "vasteras":             ("#00388A", "#FFFFFF", "#FFD700"),
+    "vastervik_ik":         ("#007755", "#FFFFFF", None),
+    "vastervik":            ("#007755", "#FFFFFF", None),
+    "sodertalje_sk":        ("#003F7F", "#FFFFFF", "#CC0000"),
+    "sodertalje":           ("#003F7F", "#FFFFFF", "#CC0000"),
+}
+
+_TRANSLIT = str.maketrans("aaoAAOeuu", "\xe5\xe4\xf6\xc5\xc4\xd6\xe9\xfc\xdc")
+
+def team_slug(name):
+    s = name.lower()
+    for src, dst in [("\xe5","a"),("\xe4","a"),("\xf6","o"),("\u00e9","e"),("\xfc","u")]:
+        s = s.replace(src, dst)
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+
+def make_icon_jpeg(primary, secondary, accent=None):
+    p = tuple(int(primary.lstrip("#")[i:i+2], 16) for i in (0,2,4))
+    s = tuple(int(secondary.lstrip("#")[i:i+2], 16) for i in (0,2,4))
+    a = tuple(int(accent.lstrip("#")[i:i+2], 16) for i in (0,2,4)) if accent else s
+    img = Image.new("RGB", (8, 8), p)
+    px = img.load()
+    for x in range(8):
+        px[x, 3] = s
+        px[x, 4] = a
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+def upload_icon(host, name, jpeg_bytes):
+    import urllib.request
+    boundary = "----HockeyLiveBoundary"
+    remote_path = f"/ICONS/{name}.jpg"
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="data"; filename="{remote_path}"\r\n'
+        f"Content-Type: image/jpeg\r\n\r\n"
+    ).encode() + jpeg_bytes + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(f"http://{host}/edit", data=body, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    req.add_header("Content-Length", str(len(body)))
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status < 300
+    except Exception as exc:
+        print(f"[generate_icons] Upload {name} failed: {exc}")
+        return False
+
+def main():
+    opts_file = Path("/data/options.json")
+    if not opts_file.exists():
+        print("[generate_icons] /data/options.json not found - skipping")
+        return
+    with open(opts_file) as f:
+        opts = json.load(f)
+    awtrix_host = (opts.get("awtrix_host") or "").strip()
+    out_dir = Path("/data/icons")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    uploaded = skipped = saved = 0
+    seen_colors = set()
+    for slug, colors in TEAM_COLORS.items():
+        color_key = colors
+        if color_key in seen_colors:
+            continue
+        seen_colors.add(color_key)
+        try:
+            jpeg = make_icon_jpeg(*colors)
+            (out_dir / f"{slug}.jpg").write_bytes(jpeg)
+            saved += 1
+            if awtrix_host:
+                ok = upload_icon(awtrix_host, slug, jpeg)
+                if ok:
+                    uploaded += 1
+                    print(f"[generate_icons] OK: {slug}")
+                else:
+                    skipped += 1
+        except Exception as exc:
+            print(f"[generate_icons] Error {slug}: {exc}")
+            skipped += 1
+    if awtrix_host:
+        print(f"[generate_icons] {uploaded} uploaded, {skipped} failed, icons in {out_dir}")
+    else:
+        print(f"[generate_icons] {saved} icons saved to {out_dir} (set awtrix_host to upload)")
+
+if __name__ == "__main__":
+    main()
+ICONS_PY_EOF
+
 RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260403_6100
+ENV BUILD_ID=20260403_6200
 
 EXPOSE 8080
 

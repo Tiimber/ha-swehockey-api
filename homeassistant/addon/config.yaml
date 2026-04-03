@@ -31,6 +31,7 @@ ports_description:
 # Add-on options shown in the UI
 options:
   awtrix_prefix: ""
+  awtrix_host: ""
   mqtt_host: "core-mosquitto"
   mqtt_port: 1883
   mqtt_username: ""
@@ -44,6 +45,7 @@ options:
 
 schema:
   awtrix_prefix: str
+  awtrix_host: str
   mqtt_host: str
   mqtt_port: int
   mqtt_username: str
