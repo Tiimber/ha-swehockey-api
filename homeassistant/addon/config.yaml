@@ -63,3 +63,7 @@ map:
   - type: config
     path: /config
     read_only: false
+
+# Allow calling HA services (e.g. automation.reload) via Supervisor API
+hassio_api: true
+homeassistant_api: true
