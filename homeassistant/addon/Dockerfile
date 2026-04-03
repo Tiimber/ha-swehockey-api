@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_5700
+ARG CACHEBUST=20260403_5800
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -270,8 +270,24 @@ def _build_state(status_payload: dict) -> dict:
             else "\u2013"
         )
     elif next_match:
-        status = "upcoming"
         score = "\u2013"
+        # Sub-divide upcoming by time-to-match so automations can trigger on state change
+        next_dt_raw = next_match.get("datetime_iso")
+        if next_dt_raw:
+            try:
+                dt = _datetime.fromisoformat(next_dt_raw)
+                now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
+                secs_to_match = (dt - now_sthlm).total_seconds()
+                if secs_to_match <= 7200:
+                    status = "upcoming_prematch"   # ≤2h: show 0-0 scoreboard
+                elif secs_to_match <= 86400:
+                    status = "upcoming_countdown"  # 2h–24h: show countdown
+                else:
+                    status = "upcoming_far"        # >24h: show calendar day
+            except Exception:
+                status = "upcoming_far"
+        else:
+            status = "upcoming_far"
     else:
         status = "idle"
         score = "\u2013"
@@ -800,19 +816,19 @@ _T = """\
   trigger:
     - platform: state
       entity_id: sensor.hockeylive___SLUG___status
-    - platform: state
-      entity_id: sensor.hockeylive___SLUG___status
-      attribute: next_datetime
+      to:
+        - "upcoming_far"
+        - "idle"
     - platform: time_pattern
       minutes: "/30"
     - platform: homeassistant
       event: start
   condition:
-    - condition: template
-      value_template: >
-        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
-        {{ states('sensor.hockeylive___SLUG___status') in ['upcoming','idle']
-           and (ndt is none or (as_timestamp(ndt) - now().timestamp()) >= 86400) }}
+    - condition: state
+      entity_id: sensor.hockeylive___SLUG___status
+      state:
+        - "upcoming_far"
+        - "idle"
   action:
     - service: mqtt.publish
       data:
@@ -826,24 +842,17 @@ _T = """\
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
   trigger:
+    - platform: state
+      entity_id: sensor.hockeylive___SLUG___status
+      to: "upcoming_countdown"
     - platform: time_pattern
       minutes: "/1"
-    - platform: state
-      entity_id: sensor.hockeylive___SLUG___status
-    - platform: state
-      entity_id: sensor.hockeylive___SLUG___status
-      attribute: next_datetime
     - platform: homeassistant
       event: start
   condition:
-    - condition: template
-      value_template: >
-        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
-        {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
-           and ndt is not none
-           and (as_timestamp(ndt) - now().timestamp()) < 86400
-           and (as_timestamp(ndt) - now().timestamp()) > 7200
-           and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
+    - condition: state
+      entity_id: sensor.hockeylive___SLUG___status
+      state: "upcoming_countdown"
   action:
     - variables:
         mins_left: >
@@ -861,23 +870,17 @@ _T = """\
 - alias: "AWTRIX __NAME__ - Prematch scoreboard"
   id: "awtrix___WID___prematch"
   trigger:
+    - platform: state
+      entity_id: sensor.hockeylive___SLUG___status
+      to: "upcoming_prematch"
     - platform: time_pattern
       minutes: "/1"
-    - platform: state
-      entity_id: sensor.hockeylive___SLUG___status
-    - platform: state
-      entity_id: sensor.hockeylive___SLUG___status
-      attribute: next_datetime
     - platform: homeassistant
       event: start
   condition:
-    - condition: template
-      value_template: >
-        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
-        {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
-           and ndt is not none
-           and (as_timestamp(ndt) - now().timestamp()) <= 7200
-           and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
+    - condition: state
+      entity_id: sensor.hockeylive___SLUG___status
+      state: "upcoming_prematch"
   action:
     - service: mqtt.publish
       data:
@@ -970,16 +973,15 @@ _T = """\
   trigger:
     - platform: state
       entity_id: sensor.hockeylive___SLUG___status
+      to: "finished_today"
     - platform: time_pattern
       minutes: "/10"
     - platform: homeassistant
       event: start
   condition:
-    - condition: template
-      value_template: >
-        {{ states('sensor.hockeylive___SLUG___status') == 'finished_today'
-           or (state_attr('sensor.hockeylive___SLUG___status','last_date') is not none
-               and state_attr('sensor.hockeylive___SLUG___status','last_date') == now().strftime('%Y-%m-%d')) }}
+    - condition: state
+      entity_id: sensor.hockeylive___SLUG___status
+      state: "finished_today"
   action:
     - service: mqtt.publish
       data:
@@ -1172,7 +1174,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260403_5700
+ENV BUILD_ID=20260403_5800
 
 EXPOSE 8080
 

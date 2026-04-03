@@ -141,8 +141,24 @@ def _build_state(status_payload: dict) -> dict:
             else "\u2013"
         )
     elif next_match:
-        status = "upcoming"
         score = "\u2013"
+        # Sub-divide upcoming by time-to-match so automations can trigger on state change
+        next_dt_raw = next_match.get("datetime_iso")
+        if next_dt_raw:
+            try:
+                dt = _datetime.fromisoformat(next_dt_raw)
+                now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
+                secs_to_match = (dt - now_sthlm).total_seconds()
+                if secs_to_match <= 7200:
+                    status = "upcoming_prematch"   # ≤2h: show 0-0 scoreboard
+                elif secs_to_match <= 86400:
+                    status = "upcoming_countdown"  # 2h–24h: show countdown
+                else:
+                    status = "upcoming_far"        # >24h: show calendar day
+            except Exception:
+                status = "upcoming_far"
+        else:
+            status = "upcoming_far"
     else:
         status = "idle"
         score = "\u2013"
