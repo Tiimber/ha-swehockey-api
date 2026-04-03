@@ -131,7 +131,13 @@ def _build_state(status_payload: dict) -> dict:
     # Status and main score
     if is_playing:
         period_raw = live.get("period", "")
-        _period_states = {"P1": "live_p1", "P2": "live_p2", "P3": "live_p3", "OT": "live_ot", "SO": "live_so"}
+        _period_states = {
+            "P1": "live_p1",
+            "P2": "live_p2",
+            "P3": "live_p3",
+            "OT": "live_ot",
+            "SO": "live_so",
+        }
         status = _period_states.get(period_raw, "live")
         score = f"{live.get('home_score', 0)}\u2013{live.get('away_score', 0)}"
     elif last_match_today:
@@ -571,8 +577,8 @@ class MQTTPublisher:
 
         self._state_hashes[watch_id] = h
         payload_json = json.dumps(state, ensure_ascii=False)
-        self._pub(_state_topic(watch_id), payload_json)
         self._pub(_attr_topic(watch_id), payload_json)
+        self._pub(_state_topic(watch_id), payload_json)
         logger.info(
             "MQTT state: %s → status=%s score=%s",
             watch_id,
