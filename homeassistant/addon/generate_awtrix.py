@@ -294,7 +294,7 @@ _T = """\
           {%- set _aslug = _ts(_at) -%}
           {%- set _hd = _ld[_hslug] if _hslug in _ld else _fl -%}
           {%- set _ad = _rd[_aslug] if _aslug in _rd else _fr -%}
-          {"draw":[{{ _hd }},{"dt":[10,1,"0-0","#FFD700"]},{"dp":[9,7,"#404040"]},{"dp":[12,7,"#404040"]},{"dp":[15,7,"#404040"]},{"dp":[18,7,"#404040"]},{"dp":[21,7,"#404040"]},{{ _ad }}],"noScroll":true,"duration":10,"lifetime":120}
+          {"draw":[{{ _hd }},{"dt":[10,1,"0-0","#FFFFFF"]},{"dp":[9,7,"#404040"]},{"dp":[12,7,"#404040"]},{"dp":[15,7,"#404040"]},{"dp":[18,7,"#404040"]},{"dp":[21,7,"#404040"]},{{ _ad }}],"noScroll":true,"duration":10,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Live scoreboard"
   id: "awtrix___WID___live"

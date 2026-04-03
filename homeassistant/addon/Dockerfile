@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_8100
+ARG CACHEBUST=20260403_8200
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1043,7 +1043,7 @@ _T = """\
           {%- set _aslug = _ts(_at) -%}
           {%- set _hd = _ld[_hslug] if _hslug in _ld else _fl -%}
           {%- set _ad = _rd[_aslug] if _aslug in _rd else _fr -%}
-          {"draw":[{{ _hd }},{"dt":[10,1,"0-0","#FFD700"]},{"dp":[9,7,"#404040"]},{"dp":[12,7,"#404040"]},{"dp":[15,7,"#404040"]},{"dp":[18,7,"#404040"]},{"dp":[21,7,"#404040"]},{{ _ad }}],"noScroll":true,"duration":10,"lifetime":120}
+          {"draw":[{{ _hd }},{"dt":[10,1,"0-0","#FFFFFF"]},{"dp":[9,7,"#404040"]},{"dp":[12,7,"#404040"]},{"dp":[15,7,"#404040"]},{"dp":[18,7,"#404040"]},{"dp":[21,7,"#404040"]},{{ _ad }}],"noScroll":true,"duration":10,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Live scoreboard"
   id: "awtrix___WID___live"
