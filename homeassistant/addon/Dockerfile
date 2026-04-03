@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_5800
+ARG CACHEBUST=20260403_5900
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -259,7 +259,9 @@ def _build_state(status_payload: dict) -> dict:
 
     # Status and main score
     if is_playing:
-        status = "live"
+        period_raw = live.get("period", "")
+        _period_states = {"P1": "live_p1", "P2": "live_p2", "P3": "live_p3", "OT": "live_ot", "SO": "live_so"}
+        status = _period_states.get(period_raw, "live")
         score = f"{live.get('home_score', 0)}\u2013{live.get('away_score', 0)}"
     elif last_match_today:
         # Game finished today — keep showing result until midnight
@@ -895,16 +897,21 @@ _T = """\
   trigger:
     - platform: state
       entity_id: sensor.hockeylive___SLUG___status
-    - platform: state
-      entity_id: binary_sensor.hockeylive___SLUG___live
+      to:
+        - "live_p1"
+        - "live_p2"
+        - "live_p3"
+        - "live_ot"
+        - "live_so"
+        - "live"
     - platform: time_pattern
       minutes: "/1"
     - platform: homeassistant
       event: start
   condition:
-    - condition: state
-      entity_id: binary_sensor.hockeylive___SLUG___live
-      state: "on"
+    - condition: template
+      value_template: >-
+        {{ states('sensor.hockeylive___SLUG___status') in ['live_p1','live_p2','live_p3','live_ot','live_so','live'] }}
   action:
     - service: mqtt.publish
       data:
@@ -928,12 +935,10 @@ _T = """\
     - platform: state
       entity_id: sensor.hockeylive___SLUG___last_goal_scorer
   condition:
-    - condition: state
-      entity_id: binary_sensor.hockeylive___SLUG___live
-      state: "on"
     - condition: template
-      value_template: >
-        {{ trigger.to_state.state not in ['unknown','unavailable','-'] }}
+      value_template: >-
+        {{ states('sensor.hockeylive___SLUG___status') in ['live_p1','live_p2','live_p3','live_ot','live_so','live']
+           and trigger.to_state.state not in ['unknown','unavailable','-'] }}
   action:
     - service: mqtt.publish
       data:
@@ -951,11 +956,13 @@ _T = """\
   id: "awtrix___WID___finished"
   trigger:
     - platform: state
-      entity_id: binary_sensor.hockeylive___SLUG___live
-      to: "off"
+      entity_id: sensor.hockeylive___SLUG___status
+      to: "finished_today"
   condition:
     - condition: template
-      value_template: "{{ trigger.from_state is not none and trigger.from_state.state == 'on' }}"
+      value_template: >-
+        {{ trigger.from_state is not none
+           and trigger.from_state.state in ['live_p1','live_p2','live_p3','live_ot','live_so','live'] }}
   action:
     - service: mqtt.publish
       data:
@@ -1174,7 +1181,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260403_5800
+ENV BUILD_ID=20260403_5900
 
 EXPOSE 8080
 

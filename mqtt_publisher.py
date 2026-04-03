@@ -130,7 +130,9 @@ def _build_state(status_payload: dict) -> dict:
 
     # Status and main score
     if is_playing:
-        status = "live"
+        period_raw = live.get("period", "")
+        _period_states = {"P1": "live_p1", "P2": "live_p2", "P3": "live_p3", "OT": "live_ot", "SO": "live_so"}
+        status = _period_states.get(period_raw, "live")
         score = f"{live.get('home_score', 0)}\u2013{live.get('away_score', 0)}"
     elif last_match_today:
         # Game finished today — keep showing result until midnight
