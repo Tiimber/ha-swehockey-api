@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_8300
+ARG CACHEBUST=20260403_8400
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -830,8 +830,8 @@ _TEAM_COLORS = {
     "aik": ("#1C1C1C", "#FFD700", None),
     "almtuna_is": ("#CC0000", "#FFFFFF", None),
     "almtuna": ("#CC0000", "#FFFFFF", None),
-    "bik_karlskoga": ("#003F7F", "#FFD700", None),
-    "karlskoga": ("#003F7F", "#FFD700", None),
+    "bik_karlskoga": ("#003F7F", "#FFFFFF", None),
+    "karlskoga": ("#003F7F", "#FFFFFF", None),
     "if_bjorkloven": ("#006633", "#FFFFFF", None),
     "bjorkloven": ("#006633", "#FFFFFF", None),
     "ik_oskarshamn": ("#003F7F", "#FFFFFF", "#CC0000"),
@@ -1382,8 +1382,8 @@ TEAM_COLORS = {
     "aik":                  ("#000000", "#FFD700", None),
     "almtuna_is":           ("#CC0000", "#FFFFFF", None),
     "almtuna":              ("#CC0000", "#FFFFFF", None),
-    "bik_karlskoga":        ("#003F7F", "#FFD700", None),
-    "karlskoga":            ("#003F7F", "#FFD700", None),
+    "bik_karlskoga":        ("#003F7F", "#FFFFFF", None),
+    "karlskoga":            ("#003F7F", "#FFFFFF", None),
     "if_bjorkloven":        ("#006633", "#FFFFFF", None),
     "bjorkloven":           ("#006633", "#FFFFFF", None),
     "ik_oskarshamn":        ("#003F7F", "#FFFFFF", "#CC0000"),
