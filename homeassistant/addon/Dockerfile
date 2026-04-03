@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_7700
+ARG CACHEBUST=20260403_7800
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -941,7 +941,7 @@ _T = """\
           {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
           {%- set day = (ndt[8:10]|int(0))|string if ndt else '' -%}
           {%- set dx = 12 if day|length == 1 else 10 -%}
-          {%- if day -%}{"draw":[__TEAMDRAW__,{"df":[9,0,9,2,"#CC0000"]},{"df":[9,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{"draw":[__TEAMDRAW__],"noScroll":true,"duration":10,"lifetime":600}{%- endif -%}
+          {%- if day -%}{"draw":[__TEAMDRAW__,{"df":[9,0,9,2,"#CC0000"]},{"df":[9,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{%- endif -%}
 
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
