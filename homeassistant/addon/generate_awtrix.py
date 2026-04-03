@@ -26,6 +26,103 @@ import sys
 import unicodedata
 from pathlib import Path
 
+# ---------------------------------------------------------------------------
+# Team colors – drawn directly via AWTRIX draw commands, no icon files needed.
+# cols 0-2: primary | cols 3-4: secondary | cols 5-7: accent (or primary)
+# ---------------------------------------------------------------------------
+_TEAM_COLORS = {
+    # SHL
+    "brynas_if": ("#006633", "#FFD700", None),
+    "brynas": ("#006633", "#FFD700", None),
+    "djurgardens_if": ("#00297A", "#CE2029", "#FFD700"),
+    "djurgardens": ("#00297A", "#CE2029", "#FFD700"),
+    "farjestad_bk": ("#00542A", "#FFD700", None),
+    "farjestad": ("#00542A", "#FFD700", None),
+    "frolunda_hc": ("#6B1D2A", "#FFD700", None),
+    "frolunda": ("#6B1D2A", "#FFD700", None),
+    "hc_frolunda": ("#6B1D2A", "#FFD700", None),
+    "hv71": ("#FFD700", "#FFFFFF", "#003F7F"),
+    "linkoping_hc": ("#003F6D", "#FFFFFF", None),
+    "linkoping": ("#003F6D", "#FFFFFF", None),
+    "lhc": ("#003F6D", "#FFFFFF", None),
+    "lulea_hf": ("#CC0000", "#FFFFFF", "#004080"),
+    "lulea": ("#CC0000", "#FFFFFF", "#004080"),
+    "malmo_redhawks": ("#CC0000", "#000000", "#FFFFFF"),
+    "malmo": ("#CC0000", "#000000", "#FFFFFF"),
+    "modo_hockey": ("#CC0000", "#FFFFFF", "#000000"),
+    "modo": ("#CC0000", "#FFFFFF", "#000000"),
+    "rogle_bk": ("#CC0000", "#FFFFFF", "#003F7F"),
+    "rogle": ("#CC0000", "#FFFFFF", "#003F7F"),
+    "skelleftea_aik": ("#FFD700", "#000000", None),
+    "skelleftea": ("#FFD700", "#000000", None),
+    "saik": ("#FFD700", "#000000", None),
+    "timra_ik": ("#CC0000", "#FFFFFF", "#000000"),
+    "timra": ("#CC0000", "#FFFFFF", "#000000"),
+    "orebro_hk": ("#001B50", "#FFFFFF", "#FFD700"),
+    "orebro": ("#001B50", "#FFFFFF", "#FFD700"),
+    "vaxjo_lakers": ("#1E5E3D", "#FFFFFF", "#CC0000"),
+    "vaxjo": ("#1E5E3D", "#FFFFFF", "#CC0000"),
+    # HockeyAllsvenskan
+    "aik": ("#000000", "#FFD700", None),
+    "almtuna_is": ("#CC0000", "#FFFFFF", None),
+    "almtuna": ("#CC0000", "#FFFFFF", None),
+    "bik_karlskoga": ("#003F7F", "#FFD700", None),
+    "karlskoga": ("#003F7F", "#FFD700", None),
+    "if_bjorkloven": ("#006633", "#FFFFFF", None),
+    "bjorkloven": ("#006633", "#FFFFFF", None),
+    "ik_oskarshamn": ("#003F7F", "#FFFFFF", "#CC0000"),
+    "oskarshamn": ("#003F7F", "#FFFFFF", "#CC0000"),
+    "karlskrona_hk": ("#003F7F", "#FFFFFF", None),
+    "karlskrona": ("#003F7F", "#FFFFFF", None),
+    "kristianstad_ik": ("#CC0000", "#FFFFFF", "#000000"),
+    "kristianstad": ("#CC0000", "#FFFFFF", "#000000"),
+    "mora_ik": ("#003F7F", "#FFD700", None),
+    "mora": ("#003F7F", "#FFD700", None),
+    "nybro_vikings_if": ("#006633", "#CC0000", "#FFFFFF"),
+    "nybro": ("#006633", "#CC0000", "#FFFFFF"),
+    "tingsryd_aif": ("#CC0000", "#FFFFFF", None),
+    "tingsryd": ("#CC0000", "#FFFFFF", None),
+    "vik_vasteras_hk": ("#00388A", "#FFFFFF", "#FFD700"),
+    "vasteras": ("#00388A", "#FFFFFF", "#FFD700"),
+    "vastervik_ik": ("#007755", "#FFFFFF", None),
+    "vastervik": ("#007755", "#FFFFFF", None),
+    "sodertalje_sk": ("#003F7F", "#FFFFFF", "#CC0000"),
+    "sodertalje": ("#003F7F", "#FFFFFF", "#CC0000"),
+    "huddinge_ik": ("#CC0000", "#FFFFFF", None),
+    "huddinge": ("#CC0000", "#FFFFFF", None),
+    "kalmar_hc": ("#CC0000", "#000000", None),
+    "kalmar": ("#CC0000", "#000000", None),
+}
+
+_TRANSLIT = str.maketrans("åäöÅÄÖéüÜ", "aaoAAOeuu")
+
+
+def _tslug(name: str) -> str:
+    s = name.translate(_TRANSLIT).lower()
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+
+
+def _team_draw_fragment(team_name: str) -> str:
+    """Return JSON draw-command objects (no brackets) for team jersey stripes."""
+    slug = _tslug(team_name)
+    colors = _TEAM_COLORS.get(slug)
+    if not colors:
+        for k, v in _TEAM_COLORS.items():
+            if slug.startswith(k) or k.startswith(slug):
+                colors = v
+                break
+    if colors:
+        p, s, a = colors
+        acc = a if a else p
+    else:
+        p, s, acc = "#444444", "#888888", "#444444"
+    return (
+        f'{{"df":[0,0,3,8,"{p}"]}},'
+        f'{{"df":[3,0,2,8,"{s}"]}},'
+        f'{{"df":[5,0,3,8,"{acc}"]}}')
+
+
 OPTIONS = Path("/data/options.json")
 WATCHLIST = Path("/data/watchlist.json")
 OUT_FILE = Path("/config/packages/hockeylive_awtrix.yaml")
@@ -75,7 +172,7 @@ _T = """\
           {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
           {%- set day = (ndt[8:10]|int(0))|string if ndt else '' -%}
           {%- set dx = 12 if day|length == 1 else 10 -%}
-          {%- if day -%}{"icon":"__ICON__","draw":[{"df":[9,0,9,2,"#CC0000"]},{"df":[9,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{"icon":"__ICON__","duration":10,"lifetime":600}{%- endif -%}
+          {%- if day -%}{"draw":[__TEAMDRAW__,{"df":[9,0,9,2,"#CC0000"]},{"df":[9,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{"draw":[__TEAMDRAW__],"noScroll":true,"duration":10,"lifetime":600}{%- endif -%}
 
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
@@ -107,7 +204,7 @@ _T = """\
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
-          {"icon":"__ICON__","text":[{"t":"{{ cdtext }}","c":"FFFFFF"}],"duration":10,"lifetime":120}
+          {"draw":[__TEAMDRAW__],"text":[{"t":"{{ cdtext }}","c":"FFFFFF"}],"duration":10,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Prematch scoreboard"
   id: "awtrix___WID___prematch"
@@ -190,7 +287,7 @@ _T = """\
           {%- set sit = state_attr('sensor.hockeylive___SLUG___status','last_goal_situation') or 'ES' -%}
           {%- set score = state_attr('sensor.hockeylive___SLUG___status','score') -%}
           {%- set sitc = 'FFD700' if sit == 'PP' else '00AAFF' if sit == 'SH' else 'FFFFFF' -%}
-          {"icon":"{{ team[0]|upper }}","text":[{"t":"MAL! ","c":"FFD700"},{"t":"{{ sc }}","c":"FFFFFF"},{"t":" {{ score }}","c":"FFD700"}{% if ass %},{"t":" Ass: {{ ass|join(', ') }}","c":"888888"}{% endif %}{% if sit not in ['ES',''] %},{"t":" ({{ sit }})","c":"{{ sitc }}"}{% endif %}],"duration":30,"stack":false,"wakeup":true}
+          {"draw":[__TEAMDRAW__],"text":[{"t":"MAL! ","c":"FFD700"},{"t":"{{ sc }}","c":"FFFFFF"},{"t":" {{ score }}","c":"FFD700"}{% if ass %},{"t":" Ass: {{ ass|join(', ') }}","c":"888888"}{% endif %}{% if sit not in ['ES',''] %},{"t":" ({{ sit }})","c":"{{ sitc }}"}{% endif %}],"duration":30,"stack":false,"wakeup":true}
 
 - alias: "AWTRIX __NAME__ - Match slut"
   id: "awtrix___WID___finished"
@@ -211,7 +308,7 @@ _T = """\
           {%- set ot = state_attr('sensor.hockeylive___SLUG___status','last_went_ot') -%}
           {%- set dc = '#00C800' if won else '#C80000' -%}
           {%- set oc = dc if ot else '#404040' -%}
-          {"icon":"__ICON__","text":[{"t":"{{ ls }}","c":"{{ dc }}"},{"t":" {{ '+' if won else 'x' }}","c":"{{ dc }}"}],"draw":[{"dp":[8,7,"{{ dc }}"]},{"dp":[13,7,"{{ dc }}"]},{"dp":[18,7,"{{ dc }}"]},{"dp":[23,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"duration":30,"lifetime":3600}
+          {"draw":[__TEAMDRAW__,{"dp":[8,7,"{{ dc }}"]},{"dp":[13,7,"{{ dc }}"]},{"dp":[18,7,"{{ dc }}"]},{"dp":[23,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"text":[{"t":"{{ ls }} {{ '+' if won else 'x' }}","c":"{{ dc }}"}],"duration":30,"lifetime":3600}
 
 - alias: "AWTRIX __NAME__ - Matchresultat idag"
   id: "awtrix___WID___result_today"
@@ -301,14 +398,14 @@ def main() -> None:
     for w in enabled:
         name = w.get("name") or w["team"]
         slug = _slugify(name)
-        icon = w.get("awtrix_icon") or _slugify(name)
+        teamdraw = _team_draw_fragment(name)
         automation_blocks.append(
             _sub(
                 _T,
                 NAME=name,
                 WID=w["id"],
                 SLUG=slug,
-                ICON=icon,
+                TEAMDRAW=teamdraw,
                 APP=f"hockey_{slug}",
                 PREFIX=prefix,
             )
