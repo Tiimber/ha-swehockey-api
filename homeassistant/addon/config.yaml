@@ -67,4 +67,4 @@ map:
 # Allow calling HA services (e.g. automation.reload) via Supervisor API
 hassio_api: true
 homeassistant_api: true
-hassio_role: manager
+hassio_role: homeassistant
