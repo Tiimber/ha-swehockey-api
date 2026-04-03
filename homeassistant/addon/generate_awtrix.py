@@ -74,8 +74,8 @@ _T = """\
         payload: >-
           {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
           {%- set day = (ndt[8:10]|int(0))|string if ndt else '' -%}
-          {%- set dx = 12 if day|length == 1 else 10 -%}
-          {%- if day -%}{"icon":"__ICON__","draw":[{"df":[9,0,9,2,"#FF0000"]},{"df":[9,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":120}{%- else -%}{"icon":"__ICON__","duration":10,"lifetime":120}{%- endif -%}
+          {%- set dx = 14 if day|length == 1 else 11 -%}
+          {%- if day -%}{"icon":"__ICON__","draw":[{"df":[8,0,23,1,"#CC0000"]},{"df":[8,2,23,7,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{"icon":"__ICON__","duration":10,"lifetime":600}{%- endif -%}
 
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
