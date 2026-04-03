@@ -92,6 +92,7 @@ _T = """\
         {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
            and ndt is not none
            and (as_timestamp(ndt) - now().timestamp()) < 86400
+           and (as_timestamp(ndt) - now().timestamp()) > 7200
            and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
   action:
     - variables:
@@ -100,14 +101,38 @@ _T = """\
           {{ [((as_timestamp(ndt) - now().timestamp()) / 60)|int, 0]|max if ndt else 0 }}
         cdtext: >
           {%- set m = mins_left|int -%}
-          {%- if m >= 60 -%}{{ '%d:%02d'|format(m // 60, m % 60) }}
-          {%- elif m > 0 -%}0:{{ '%02d'|format(m) }}
-          {%- else -%}Nu!{%- endif -%}
+          {{ '%d:%02d'|format(m // 60, m % 60) }}
     - service: mqtt.publish
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
           {"icon":"__ICON__","text":[{"t":"{{ cdtext }}","c":"FFFFFF"}],"duration":10,"lifetime":120}
+
+- alias: "AWTRIX __NAME__ - Prematch scoreboard"
+  id: "awtrix___WID___prematch"
+  trigger:
+    - platform: time_pattern
+      minutes: "/1"
+    - platform: state
+      entity_id: sensor.hockeylive___SLUG___status
+    - platform: homeassistant
+      event: start
+  condition:
+    - condition: template
+      value_template: >
+        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
+        {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
+           and ndt is not none
+           and (as_timestamp(ndt) - now().timestamp()) <= 7200
+           and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "__PREFIX__/custom/__APP__"
+        payload: >-
+          {%- set hl = (state_attr('sensor.hockeylive___SLUG___status','next_home_team') or '?')[0]|upper -%}
+          {%- set al = (state_attr('sensor.hockeylive___SLUG___status','next_away_team') or '?')[0]|upper -%}
+          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"0-0","#FFD700"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"#404040"]},{"dp":[10,7,"#404040"]},{"dp":[16,7,"#404040"]},{"dp":[22,7,"#404040"]},{"dp":[28,7,"#404040"]}],"noScroll":true,"duration":10,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Live scoreboard"
   id: "awtrix___WID___live"
