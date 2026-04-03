@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_8000
+ARG CACHEBUST=20260403_8100
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -870,14 +870,7 @@ def _tslug(name):
     return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
 
 
-def _team_draw_fragment(team_name):
-    slug = _tslug(team_name)
-    colors = _TEAM_COLORS.get(slug)
-    if not colors:
-        for k, v in _TEAM_COLORS.items():
-            if slug.startswith(k) or k.startswith(slug):
-                colors = v
-                break
+def _draw_from_colors(colors, x_offset=0):
     if colors:
         p, s, a = colors
     else:
@@ -886,6 +879,8 @@ def _team_draw_fragment(team_name):
     parts = []
 
     def seg(x0, y, x1, color):
+        x0 += x_offset
+        x1 += x_offset
         if x0 > x1:
             return
         if x0 == x1:
@@ -903,6 +898,42 @@ def _team_draw_fragment(team_name):
             seg(max(0, 8 - r), r, 7, a)
 
     return ",".join(parts)
+
+
+def _team_draw_fragment(team_name):
+    slug = _tslug(team_name)
+    colors = _TEAM_COLORS.get(slug)
+    if not colors:
+        for k, v in _TEAM_COLORS.items():
+            if slug.startswith(k) or k.startswith(slug):
+                colors = v
+                break
+    return _draw_from_colors(colors, 0)
+
+
+def _jinja_awtrix_draw_header():
+    l_entries = []
+    r_entries = []
+    for slug, colors in _TEAM_COLORS.items():
+        l = _draw_from_colors(colors, 0)
+        r = _draw_from_colors(colors, 24)
+        l_entries.append("'" + slug + "':'" + l + "'")
+        r_entries.append("'" + slug + "':'" + r + "'")
+    fallback_l = _draw_from_colors(None, 0)
+    fallback_r = _draw_from_colors(None, 24)
+    ld = "{%- set _ld={" + ",".join(l_entries) + "} -%}"
+    rd = "{%- set _rd={" + ",".join(r_entries) + "} -%}"
+    ts = (
+        "{%- macro _ts(n) -%}"
+        "{{- n|lower"
+        "|replace('å','a')|replace('ä','a')|replace('ö','o')"
+        "|replace('é','e')|replace('ü','u')"
+        "|replace(' ','_')|replace('-','_')|replace('.','') -}}"
+        "{%- endmacro -%}"
+    )
+    fl = "{%- set _fl='" + fallback_l + "' -%}"
+    fr = "{%- set _fr='" + fallback_r + "' -%}"
+    return ld + rd + ts + fl + fr
 
 
 OPTIONS = Path("/data/options.json")
@@ -1006,9 +1037,13 @@ _T = """\
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
-          {%- set hl = (state_attr('sensor.hockeylive___SLUG___status','next_home_team') or '?')[0]|upper -%}
-          {%- set al = (state_attr('sensor.hockeylive___SLUG___status','next_away_team') or '?')[0]|upper -%}
-          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"0-0","#FFD700"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"#404040"]},{"dp":[10,7,"#404040"]},{"dp":[16,7,"#404040"]},{"dp":[22,7,"#404040"]},{"dp":[28,7,"#404040"]}],"noScroll":true,"duration":10,"lifetime":120}
+          __AWTRIX_DRAW_HDR__{%- set _ht = state_attr('sensor.hockeylive___SLUG___status','next_home_team')|string -%}
+          {%- set _at = state_attr('sensor.hockeylive___SLUG___status','next_away_team')|string -%}
+          {%- set _hslug = _ts(_ht) -%}
+          {%- set _aslug = _ts(_at) -%}
+          {%- set _hd = _ld[_hslug] if _hslug in _ld else _fl -%}
+          {%- set _ad = _rd[_aslug] if _aslug in _rd else _fr -%}
+          {"draw":[{{ _hd }},{"dt":[10,1,"0-0","#FFD700"]},{"dp":[9,7,"#404040"]},{"dp":[12,7,"#404040"]},{"dp":[15,7,"#404040"]},{"dp":[18,7,"#404040"]},{"dp":[21,7,"#404040"]},{{ _ad }}],"noScroll":true,"duration":10,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Live scoreboard"
   id: "awtrix___WID___live"
@@ -1035,17 +1070,21 @@ _T = """\
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
-          {%- set p = state_attr('sensor.hockeylive___SLUG___status','period') -%}
+          __AWTRIX_DRAW_HDR__{%- set p = state_attr('sensor.hockeylive___SLUG___status','period') -%}
           {%- set hs = state_attr('sensor.hockeylive___SLUG___status','home_score')|default(0)|int -%}
           {%- set as_ = state_attr('sensor.hockeylive___SLUG___status','away_score')|default(0)|int -%}
-          {%- set hl = (state_attr('sensor.hockeylive___SLUG___status','home_team') or '?')[0]|upper -%}
-          {%- set al = (state_attr('sensor.hockeylive___SLUG___status','away_team') or '?')[0]|upper -%}
+          {%- set _ht = state_attr('sensor.hockeylive___SLUG___status','home_team')|string -%}
+          {%- set _at = state_attr('sensor.hockeylive___SLUG___status','away_team')|string -%}
+          {%- set _hslug = _ts(_ht) -%}
+          {%- set _aslug = _ts(_at) -%}
+          {%- set _hd = _ld[_hslug] if _hslug in _ld else _fl -%}
+          {%- set _ad = _rd[_aslug] if _aslug in _rd else _fr -%}
           {%- set p1c = '#1E3A5F' if p in ['P2','P3','OT','SO'] else '#FFD700' if p == 'P1' else '#404040' -%}
           {%- set p2c = '#1E3A5F' if p in ['P3','OT','SO'] else '#FFD700' if p == 'P2' else '#404040' -%}
           {%- set p3c = '#1E3A5F' if p in ['OT','SO'] else '#FFD700' if p == 'P3' else '#404040' -%}
           {%- set otc = '#1E3A5F' if p == 'SO' else '#FFD700' if p == 'OT' else '#404040' -%}
           {%- set soc = '#FFD700' if p == 'SO' else '#404040' -%}
-          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"{{ hs }}-{{ as_ }}","#FFD700"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"{{ p1c }}"]},{"dp":[10,7,"{{ p2c }}"]},{"dp":[16,7,"{{ p3c }}"]},{"dp":[22,7,"{{ otc }}"]},{"dp":[28,7,"{{ soc }}"]}],"noScroll":true,"lifetime":120}
+          {"draw":[{{ _hd }},{"dt":[10,1,"{{ hs }}-{{ as_ }}","#FFD700"]},{"dp":[9,7,"{{ p1c }}"]},{"dp":[12,7,"{{ p2c }}"]},{"dp":[15,7,"{{ p3c }}"]},{"dp":[18,7,"{{ otc }}"]},{"dp":[21,7,"{{ soc }}"]},{{ _ad }}],"noScroll":true,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Mal!"
   id: "awtrix___WID___goal"
@@ -1112,15 +1151,19 @@ _T = """\
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
-          {%- set hl = (state_attr('sensor.hockeylive___SLUG___status','last_home_team') or '?')[0]|upper -%}
-          {%- set al = (state_attr('sensor.hockeylive___SLUG___status','last_away_team') or '?')[0]|upper -%}
+          __AWTRIX_DRAW_HDR__{%- set _ht = state_attr('sensor.hockeylive___SLUG___status','last_home_team')|string -%}
+          {%- set _at = state_attr('sensor.hockeylive___SLUG___status','last_away_team')|string -%}
+          {%- set _hslug = _ts(_ht) -%}
+          {%- set _aslug = _ts(_at) -%}
+          {%- set _hd = _ld[_hslug] if _hslug in _ld else _fl -%}
+          {%- set _ad = _rd[_aslug] if _aslug in _rd else _fr -%}
           {%- set hs = state_attr('sensor.hockeylive___SLUG___status','last_home_score')|int(0) -%}
           {%- set as_ = state_attr('sensor.hockeylive___SLUG___status','last_away_score')|int(0) -%}
           {%- set won = state_attr('sensor.hockeylive___SLUG___status','last_won') -%}
           {%- set ot = state_attr('sensor.hockeylive___SLUG___status','last_went_ot') -%}
           {%- set dc = '#00C800' if won else '#C80000' -%}
           {%- set oc = dc if ot else '#404040' -%}
-          {"draw":[{"dt":[0,1,"{{ hl }}","#FFFFFF"]},{"dt":[9,1,"{{ hs }}-{{ as_ }}","{{ dc }}"]},{"dt":[25,1,"{{ al }}","#FFFFFF"]},{"dp":[4,7,"{{ dc }}"]},{"dp":[10,7,"{{ dc }}"]},{"dp":[16,7,"{{ dc }}"]},{"dp":[22,7,"{{ oc }}"]},{"dp":[28,7,"#404040"]}],"noScroll":true,"duration":10,"lifetime":1800}
+          {"draw":[{{ _hd }},{"dt":[10,1,"{{ hs }}-{{ as_ }}","{{ dc }}"]},{"dp":[9,7,"{{ dc }}"]},{"dp":[12,7,"{{ dc }}"]},{"dp":[15,7,"{{ dc }}"]},{"dp":[18,7,"{{ oc }}"]},{"dp":[21,7,"#404040"]},{{ _ad }}],"noScroll":true,"duration":10,"lifetime":1800}
 
 - alias: "AWTRIX __NAME__ - Rensa vid midnatt"
   id: "awtrix___WID___midnight"
@@ -1176,6 +1219,7 @@ def main() -> None:
 
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+    awtrix_draw_hdr = _jinja_awtrix_draw_header()
     automation_blocks = []
     for w in enabled:
         name = w.get("name") or w["team"]
@@ -1188,6 +1232,7 @@ def main() -> None:
                 WID=w["id"],
                 SLUG=slug,
                 TEAMDRAW=teamdraw,
+                AWTRIX_DRAW_HDR=awtrix_draw_hdr,
                 APP=f"hockey_{slug}",
                 PREFIX=prefix,
             )
