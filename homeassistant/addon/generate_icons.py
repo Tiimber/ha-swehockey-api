@@ -38,82 +38,82 @@ TEAM_COLORS: dict[str, tuple[str, str, str | None]] = {
     # ============================================================
     # SHL
     # ============================================================
-    "brynas_if":            ("#006633", "#FFD700", None),
-    "brynas":               ("#006633", "#FFD700", None),
-    "djurgardens_if":       ("#00297A", "#CE2029", "#FFD700"),
-    "djurgardens":          ("#00297A", "#CE2029", "#FFD700"),
-    "farjestad_bk":         ("#00542A", "#FFD700", None),
-    "farjestad":            ("#00542A", "#FFD700", None),
-    "frolunda_hc":          ("#6B1D2A", "#FFD700", None),
-    "frolunda":             ("#6B1D2A", "#FFD700", None),
-    "hc_frolunda":          ("#6B1D2A", "#FFD700", None),
-    "hv71":                 ("#000000", "#FFD700", None),
-    "linkoping_hc":         ("#003F6D", "#FFFFFF", None),
-    "linkoping":            ("#003F6D", "#FFFFFF", None),
-    "lhc":                  ("#003F6D", "#FFFFFF", None),
-    "lulea_hf":             ("#CC0000", "#FFFFFF", "#004080"),
-    "lulea":                ("#CC0000", "#FFFFFF", "#004080"),
-    "malmo_redhawks":       ("#CC0000", "#000000", "#FFFFFF"),
-    "malmo":                ("#CC0000", "#000000", "#FFFFFF"),
-    "modo_hockey":          ("#CC0000", "#FFFFFF", "#000000"),
-    "modo":                 ("#CC0000", "#FFFFFF", "#000000"),
-    "rogle_bk":             ("#CC0000", "#FFFFFF", "#003F7F"),
-    "rogle":                ("#CC0000", "#FFFFFF", "#003F7F"),
-    "skelleftea_aik":       ("#FFD700", "#000000", None),
-    "skelleftea":           ("#FFD700", "#000000", None),
-    "saik":                 ("#FFD700", "#000000", None),
-    "timra_ik":             ("#CC0000", "#FFFFFF", "#000000"),
-    "timra":                ("#CC0000", "#FFFFFF", "#000000"),
-    "orebro_hk":            ("#001B50", "#FFFFFF", "#FFD700"),
-    "orebro":               ("#001B50", "#FFFFFF", "#FFD700"),
-    "vaxjo_lakers":         ("#1E5E3D", "#FFFFFF", "#CC0000"),
-    "vaxjo":                ("#1E5E3D", "#FFFFFF", "#CC0000"),
+    "brynas_if": ("#006633", "#FFD700", None),
+    "brynas": ("#006633", "#FFD700", None),
+    "djurgardens_if": ("#00297A", "#CE2029", "#FFD700"),
+    "djurgardens": ("#00297A", "#CE2029", "#FFD700"),
+    "farjestad_bk": ("#00542A", "#FFD700", None),
+    "farjestad": ("#00542A", "#FFD700", None),
+    "frolunda_hc": ("#6B1D2A", "#FFD700", None),
+    "frolunda": ("#6B1D2A", "#FFD700", None),
+    "hc_frolunda": ("#6B1D2A", "#FFD700", None),
+    "hv71": ("#000000", "#FFD700", None),
+    "linkoping_hc": ("#003F6D", "#FFFFFF", None),
+    "linkoping": ("#003F6D", "#FFFFFF", None),
+    "lhc": ("#003F6D", "#FFFFFF", None),
+    "lulea_hf": ("#CC0000", "#FFFFFF", "#004080"),
+    "lulea": ("#CC0000", "#FFFFFF", "#004080"),
+    "malmo_redhawks": ("#CC0000", "#000000", "#FFFFFF"),
+    "malmo": ("#CC0000", "#000000", "#FFFFFF"),
+    "modo_hockey": ("#CC0000", "#FFFFFF", "#000000"),
+    "modo": ("#CC0000", "#FFFFFF", "#000000"),
+    "rogle_bk": ("#CC0000", "#FFFFFF", "#003F7F"),
+    "rogle": ("#CC0000", "#FFFFFF", "#003F7F"),
+    "skelleftea_aik": ("#FFD700", "#000000", None),
+    "skelleftea": ("#FFD700", "#000000", None),
+    "saik": ("#FFD700", "#000000", None),
+    "timra_ik": ("#CC0000", "#FFFFFF", "#000000"),
+    "timra": ("#CC0000", "#FFFFFF", "#000000"),
+    "orebro_hk": ("#001B50", "#FFFFFF", "#FFD700"),
+    "orebro": ("#001B50", "#FFFFFF", "#FFD700"),
+    "vaxjo_lakers": ("#1E5E3D", "#FFFFFF", "#CC0000"),
+    "vaxjo": ("#1E5E3D", "#FFFFFF", "#CC0000"),
     # ============================================================
     # HockeyAllsvenskan
     # ============================================================
-    "aik":                  ("#000000", "#FFD700", None),
-    "almtuna_is":           ("#CC0000", "#FFFFFF", None),
-    "almtuna":              ("#CC0000", "#FFFFFF", None),
-    "bik_karlskoga":        ("#003F7F", "#FFD700", None),
-    "karlskoga":            ("#003F7F", "#FFD700", None),
-    "if_bjorkloven":        ("#006633", "#FFFFFF", None),
-    "bjorkloven":           ("#006633", "#FFFFFF", None),
-    "ik_oskarshamn":        ("#003F7F", "#FFFFFF", "#CC0000"),
-    "oskarshamn":           ("#003F7F", "#FFFFFF", "#CC0000"),
-    "karlskrona_hk":        ("#003F7F", "#FFFFFF", None),
-    "karlskrona":           ("#003F7F", "#FFFFFF", None),
-    "kristianstad_ik":      ("#CC0000", "#FFFFFF", "#000000"),
-    "kristianstad":         ("#CC0000", "#FFFFFF", "#000000"),
-    "mora_ik":              ("#003F7F", "#FFD700", None),
-    "mora":                 ("#003F7F", "#FFD700", None),
-    "nybro_vikings_if":     ("#006633", "#CC0000", "#FFFFFF"),
-    "nybro":                ("#006633", "#CC0000", "#FFFFFF"),
-    "tingsryd_aif":         ("#CC0000", "#FFFFFF", None),
-    "tingsryd":             ("#CC0000", "#FFFFFF", None),
-    "vik_vasteras_hk":      ("#00388A", "#FFFFFF", "#FFD700"),
-    "vasteras":             ("#00388A", "#FFFFFF", "#FFD700"),
-    "vastervik_ik":         ("#007755", "#FFFFFF", None),
-    "vastervik":            ("#007755", "#FFFFFF", None),
-    "sodertalje_sk":        ("#003F7F", "#FFFFFF", "#CC0000"),
-    "sodertalje":           ("#003F7F", "#FFFFFF", "#CC0000"),
-    "huddinge_ik":          ("#CC0000", "#FFFFFF", None),
-    "huddinge":             ("#CC0000", "#FFFFFF", None),
+    "aik": ("#000000", "#FFD700", None),
+    "almtuna_is": ("#CC0000", "#FFFFFF", None),
+    "almtuna": ("#CC0000", "#FFFFFF", None),
+    "bik_karlskoga": ("#003F7F", "#FFD700", None),
+    "karlskoga": ("#003F7F", "#FFD700", None),
+    "if_bjorkloven": ("#006633", "#FFFFFF", None),
+    "bjorkloven": ("#006633", "#FFFFFF", None),
+    "ik_oskarshamn": ("#003F7F", "#FFFFFF", "#CC0000"),
+    "oskarshamn": ("#003F7F", "#FFFFFF", "#CC0000"),
+    "karlskrona_hk": ("#003F7F", "#FFFFFF", None),
+    "karlskrona": ("#003F7F", "#FFFFFF", None),
+    "kristianstad_ik": ("#CC0000", "#FFFFFF", "#000000"),
+    "kristianstad": ("#CC0000", "#FFFFFF", "#000000"),
+    "mora_ik": ("#003F7F", "#FFD700", None),
+    "mora": ("#003F7F", "#FFD700", None),
+    "nybro_vikings_if": ("#006633", "#CC0000", "#FFFFFF"),
+    "nybro": ("#006633", "#CC0000", "#FFFFFF"),
+    "tingsryd_aif": ("#CC0000", "#FFFFFF", None),
+    "tingsryd": ("#CC0000", "#FFFFFF", None),
+    "vik_vasteras_hk": ("#00388A", "#FFFFFF", "#FFD700"),
+    "vasteras": ("#00388A", "#FFFFFF", "#FFD700"),
+    "vastervik_ik": ("#007755", "#FFFFFF", None),
+    "vastervik": ("#007755", "#FFFFFF", None),
+    "sodertalje_sk": ("#003F7F", "#FFFFFF", "#CC0000"),
+    "sodertalje": ("#003F7F", "#FFFFFF", "#CC0000"),
+    "huddinge_ik": ("#CC0000", "#FFFFFF", None),
+    "huddinge": ("#CC0000", "#FFFFFF", None),
     # ============================================================
     # CHL / international (common opponents)
     # ============================================================
-    "frolunda_gothenburg":  ("#6B1D2A", "#FFD700", None),
-    "tappara":              ("#CC0000", "#FFFFFF", None),
-    "karpat":               ("#CC0000", "#000000", None),
-    "tps":                  ("#003F7F", "#FFFFFF", None),
-    "ilves":                ("#FFD700", "#000000", None),
-    "pelicans":             ("#CC0000", "#FFFFFF", None),
-    "jokerit":              ("#CC0000", "#FFFFFF", None),
-    "hifk":                 ("#CC0000", "#FFFFFF", None),
-    "lukko":                ("#003F7F", "#FFFFFF", None),
-    "hpk":                  ("#CC0000", "#000000", None),
-    "jyvaskyla":            ("#003F7F", "#FFFFFF", None),
-    "espoo_blues":          ("#003F7F", "#FFFFFF", None),
-    "khl":                  ("#CC0000", "#003F7F", None),
+    "frolunda_gothenburg": ("#6B1D2A", "#FFD700", None),
+    "tappara": ("#CC0000", "#FFFFFF", None),
+    "karpat": ("#CC0000", "#000000", None),
+    "tps": ("#003F7F", "#FFFFFF", None),
+    "ilves": ("#FFD700", "#000000", None),
+    "pelicans": ("#CC0000", "#FFFFFF", None),
+    "jokerit": ("#CC0000", "#FFFFFF", None),
+    "hifk": ("#CC0000", "#FFFFFF", None),
+    "lukko": ("#003F7F", "#FFFFFF", None),
+    "hpk": ("#CC0000", "#000000", None),
+    "jyvaskyla": ("#003F7F", "#FFFFFF", None),
+    "espoo_blues": ("#003F7F", "#FFFFFF", None),
+    "khl": ("#CC0000", "#003F7F", None),
     # ============================================================
     # Fallback generic colors per first letter (used if no match)
     # ============================================================
@@ -152,6 +152,7 @@ def lookup_colors(team_name: str) -> tuple[str, str, str | None] | None:
 # Icon generation
 # ---------------------------------------------------------------------------
 
+
 def _hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -186,6 +187,7 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
 # AWTRIX upload
 # ---------------------------------------------------------------------------
 
+
 def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
     """
     Upload icon to AWTRIX3 via its LittleFS web editor (/edit endpoint).
@@ -202,10 +204,14 @@ def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
     remote_path = f"/ICONS/{filename}"
 
     body = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="data"; filename="{remote_path}"\r\n'
-        f"Content-Type: image/jpeg\r\n\r\n"
-    ).encode() + jpeg_bytes + f"\r\n--{boundary}--\r\n".encode()
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="data"; filename="{remote_path}"\r\n'
+            f"Content-Type: image/jpeg\r\n\r\n"
+        ).encode()
+        + jpeg_bytes
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
 
     req = urllib.request.Request(
         f"http://{host}/edit",
@@ -220,7 +226,9 @@ def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
             ok = resp.status < 300
             if not ok:
                 body_resp = resp.read().decode("utf-8", errors="replace")[:200]
-                print(f"[generate_icons] Upload {icon_name}: HTTP {resp.status} – {body_resp}")
+                print(
+                    f"[generate_icons] Upload {icon_name}: HTTP {resp.status} – {body_resp}"
+                )
             return ok
     except Exception as exc:
         print(f"[generate_icons] Upload {icon_name} failed: {exc}")
@@ -230,6 +238,7 @@ def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     options_file = Path("/data/options.json")
