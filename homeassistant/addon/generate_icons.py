@@ -181,7 +181,7 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
             px[7, y] = a
 
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=100)
+    img.save(buf, format="JPEG", quality=100, subsampling=0)
     return buf.getvalue()
 
 

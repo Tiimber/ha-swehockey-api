@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_6900
+ARG CACHEBUST=20260403_7000
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1271,7 +1271,7 @@ def make_icon_jpeg(primary, secondary, accent=None):
             px[6, y] = a
             px[7, y] = a
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=100)
+    img.save(buf, format="JPEG", quality=100, subsampling=0)
     return buf.getvalue()
 
 def upload_icon(host, name, jpeg_bytes):
