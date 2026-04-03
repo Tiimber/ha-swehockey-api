@@ -25,12 +25,13 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_6200
+ARG CACHEBUST=20260403_6300
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
-    && curl -fsSL "${REPO_URL}" \
-    | tar -xz --strip-components=1 \
+    && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/repo.tar.gz "${REPO_URL}" \
+    && tar -xz --strip-components=1 -f /tmp/repo.tar.gz \
+    && rm /tmp/repo.tar.gz \
     && pip3 install --no-cache-dir -r requirements.txt \
     && rm -rf homeassistant/ custom_components/ scripts/
 
