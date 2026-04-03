@@ -74,8 +74,8 @@ _T = """\
         payload: >-
           {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
           {%- set day = (ndt[8:10]|int(0))|string if ndt else '' -%}
-          {%- set dx = 14 if day|length == 1 else 11 -%}
-          {%- if day -%}{"icon":"__ICON__","draw":[{"df":[8,0,23,1,"#CC0000"]},{"df":[8,2,23,7,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{"icon":"__ICON__","duration":10,"lifetime":600}{%- endif -%}
+          {%- set dx = 16 if day|length == 1 else 13 -%}
+          {%- if day -%}{"icon":"__ICON__","draw":[{"df":[9,0,23,2,"#CC0000"]},{"df":[9,2,23,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{"icon":"__ICON__","duration":10,"lifetime":600}{%- endif -%}
 
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
@@ -301,7 +301,7 @@ def main() -> None:
     for w in enabled:
         name = w.get("name") or w["team"]
         slug = _slugify(name)
-        icon = w.get("awtrix_icon") or name[0].upper()
+        icon = w.get("awtrix_icon") or _slugify(name)
         automation_blocks.append(
             _sub(
                 _T,
