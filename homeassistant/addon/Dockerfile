@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_5500
+ARG CACHEBUST=20260403_5600
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1119,19 +1119,21 @@ def main() -> None:
     supervisor_token = os.environ.get("SUPERVISOR_TOKEN")
     if supervisor_token:
         import urllib.request, urllib.error
-        print(f"[generate_awtrix] SUPERVISOR_TOKEN present ({len(supervisor_token)} chars), ends ...{supervisor_token[-6:]}")
-        # Diagnostic: test hassio_api (ping) before attempting homeassistant_api (core/api)
+        req = urllib.request.Request(
+            "http://supervisor/core/api/services/automation/reload",
+            data=b"{}",
+            method="POST",
+        )
+        req.add_header("Authorization", f"Bearer {supervisor_token}")
+        req.add_header("Content-Type", "application/json")
         try:
-            ping_req = urllib.request.Request("http://supervisor/supervisor/ping", method="GET")
-            ping_req.add_header("Authorization", f"Bearer {supervisor_token}")
-            with urllib.request.urlopen(ping_req, timeout=5) as r:
-                print(f"[generate_awtrix] Supervisor ping: HTTP {r.status} (hassio_api OK)")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                print(f"[generate_awtrix] HA automations reloaded (HTTP {resp.status})")
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            print(f"[generate_awtrix] Supervisor ping FAILED {exc} — {body[:200]}")
-            print("[generate_awtrix] → hassio_api not effective; go to Add-on Store → Reload to re-read config.yaml")
+            print(f"[generate_awtrix] Could not reload automations: {exc} — {body[:300]}")
         except Exception as exc:
-            print(f"[generate_awtrix] Supervisor ping error: {exc}")
+            print(f"[generate_awtrix] Could not reload automations: {exc}")
         req = urllib.request.Request(
             "http://supervisor/core/api/services/automation/reload",
             data=b"{}",
@@ -1161,7 +1163,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260403_5500
+ENV BUILD_ID=20260403_5600
 
 EXPOSE 8080
 
