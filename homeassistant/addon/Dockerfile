@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_7600
+ARG CACHEBUST=20260403_7700
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -811,23 +811,23 @@ _TEAM_COLORS = {
     "lhc": ("#003F6D", "#FFFFFF", None),
     "lulea_hf": ("#CC0000", "#FFFFFF", "#004080"),
     "lulea": ("#CC0000", "#FFFFFF", "#004080"),
-    "malmo_redhawks": ("#CC0000", "#000000", "#FFFFFF"),
-    "malmo": ("#CC0000", "#000000", "#FFFFFF"),
-    "modo_hockey": ("#CC0000", "#FFFFFF", "#000000"),
-    "modo": ("#CC0000", "#FFFFFF", "#000000"),
+    "malmo_redhawks": ("#CC0000", "#1C1C1C", "#FFFFFF"),
+    "malmo": ("#CC0000", "#1C1C1C", "#FFFFFF"),
+    "modo_hockey": ("#CC0000", "#FFFFFF", "#1C1C1C"),
+    "modo": ("#CC0000", "#FFFFFF", "#1C1C1C"),
     "rogle_bk": ("#CC0000", "#FFFFFF", "#003F7F"),
     "rogle": ("#CC0000", "#FFFFFF", "#003F7F"),
-    "skelleftea_aik": ("#FFD700", "#000000", None),
-    "skelleftea": ("#FFD700", "#000000", None),
-    "saik": ("#FFD700", "#000000", None),
-    "timra_ik": ("#CC0000", "#FFFFFF", "#000000"),
-    "timra": ("#CC0000", "#FFFFFF", "#000000"),
+    "skelleftea_aik": ("#FFD700", "#1C1C1C", None),
+    "skelleftea": ("#FFD700", "#1C1C1C", None),
+    "saik": ("#FFD700", "#1C1C1C", None),
+    "timra_ik": ("#CC0000", "#FFFFFF", "#1C1C1C"),
+    "timra": ("#CC0000", "#FFFFFF", "#1C1C1C"),
     "orebro_hk": ("#001B50", "#FFFFFF", "#FFD700"),
     "orebro": ("#001B50", "#FFFFFF", "#FFD700"),
     "vaxjo_lakers": ("#1E5E3D", "#FFFFFF", "#CC0000"),
     "vaxjo": ("#1E5E3D", "#FFFFFF", "#CC0000"),
     # HockeyAllsvenskan
-    "aik": ("#000000", "#FFD700", None),
+    "aik": ("#1C1C1C", "#FFD700", None),
     "almtuna_is": ("#CC0000", "#FFFFFF", None),
     "almtuna": ("#CC0000", "#FFFFFF", None),
     "bik_karlskoga": ("#003F7F", "#FFD700", None),
@@ -838,8 +838,11 @@ _TEAM_COLORS = {
     "oskarshamn": ("#003F7F", "#FFFFFF", "#CC0000"),
     "karlskrona_hk": ("#003F7F", "#FFFFFF", None),
     "karlskrona": ("#003F7F", "#FFFFFF", None),
-    "kristianstad_ik": ("#CC0000", "#FFFFFF", "#000000"),
-    "kristianstad": ("#CC0000", "#FFFFFF", "#000000"),
+    "kristianstad_ik": ("#CC0000", "#FFFFFF", "#1C1C1C"),
+    "kristianstad": ("#CC0000", "#FFFFFF", "#1C1C1C"),
+    "leksands_if": ("#0055A4", "#FFFFFF", None),
+    "leksand": ("#0055A4", "#FFFFFF", None),
+    "lif": ("#0055A4", "#FFFFFF", None),
     "mora_ik": ("#003F7F", "#FFD700", None),
     "mora": ("#003F7F", "#FFD700", None),
     "nybro_vikings_if": ("#006633", "#CC0000", "#FFFFFF"),
@@ -854,8 +857,8 @@ _TEAM_COLORS = {
     "sodertalje": ("#003F7F", "#FFFFFF", "#CC0000"),
     "huddinge_ik": ("#CC0000", "#FFFFFF", None),
     "huddinge": ("#CC0000", "#FFFFFF", None),
-    "kalmar_hc": ("#CC0000", "#000000", None),
-    "kalmar": ("#CC0000", "#000000", None),
+    "kalmar_hc": ("#CC0000", "#1C1C1C", None),
+    "kalmar": ("#CC0000", "#1C1C1C", None),
 }
 
 _TRANSLIT = str.maketrans("åäöÅÄÖéüÜ", "aaoAAOeuu")
