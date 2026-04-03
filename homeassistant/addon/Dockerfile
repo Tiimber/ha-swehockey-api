@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_4900
+ARG CACHEBUST=20260403_5000
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -1120,7 +1120,7 @@ def main() -> None:
         try:
             import urllib.request
             req = urllib.request.Request(
-                "http://supervisor/core/api/services/automation/reload",
+                "http://homeassistant/api/services/automation/reload",
                 data=b"{}",
                 method="POST",
             )
@@ -1144,7 +1144,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260403_4900
+ENV BUILD_ID=20260403_5000
 
 EXPOSE 8080
 

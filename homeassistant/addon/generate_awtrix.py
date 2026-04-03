@@ -381,7 +381,7 @@ def main() -> None:
             import urllib.request
 
             req = urllib.request.Request(
-                "http://supervisor/core/api/services/automation/reload",
+                "http://homeassistant/api/services/automation/reload",
                 data=b"{}",
                 method="POST",
             )
