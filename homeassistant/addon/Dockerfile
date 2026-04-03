@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_8400
+ARG CACHEBUST=20260403_8500
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -988,7 +988,7 @@ _T = """\
           {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
           {%- set day = (ndt[8:10]|int(0))|string if ndt else '' -%}
           {%- set dx = 26 if day|length == 1 else 24 -%}
-          {%- if day -%}{"draw":[__TEAMDRAW__,{"dt":[12,2,"@","#FFFFFF"]},{"df":[23,0,9,2,"#CC0000"]},{"df":[23,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{%- endif -%}
+          {%- if day -%}{"draw":[__TEAMDRAW__,{"dl":[12,1,15,1,"#FFFFFF"]},{"dp":[11,2,"#FFFFFF"]},{"dp":[16,2,"#FFFFFF"]},{"dp":[11,3,"#FFFFFF"]},{"dl":[13,3,14,3,"#FFFFFF"]},{"dp":[16,3,"#FFFFFF"]},{"dp":[11,4,"#FFFFFF"]},{"dp":[13,4,"#FFFFFF"]},{"dp":[16,4,"#FFFFFF"]},{"dp":[11,5,"#FFFFFF"]},{"dl":[13,5,16,5,"#FFFFFF"]},{"dp":[11,6,"#FFFFFF"]},{"dl":[12,7,15,7,"#FFFFFF"]},{"df":[23,0,9,2,"#CC0000"]},{"df":[23,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{%- endif -%}
 
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
@@ -997,7 +997,7 @@ _T = """\
       entity_id: sensor.hockeylive___SLUG___status
       to: "upcoming_countdown"
     - platform: time_pattern
-      minutes: "/1"
+      seconds: "/2"
     - platform: homeassistant
       event: start
   condition:
@@ -1011,7 +1011,8 @@ _T = """\
           {{ [((as_timestamp(ndt) - now().timestamp()) / 60)|int, 0]|max if ndt else 0 }}
         cdtext: >
           {%- set m = mins_left|int -%}
-          {{ '%d:%02d'|format(m // 60, m % 60) }}
+          {%- set sep = ':' if now().second % 2 == 0 else ' ' -%}
+          {{ '%d'|format(m // 60) ~ sep ~ '%02d'|format(m % 60) }}
     - service: mqtt.publish
       data:
         topic: "__PREFIX__/custom/__APP__"
