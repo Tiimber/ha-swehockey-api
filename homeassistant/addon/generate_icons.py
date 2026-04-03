@@ -46,7 +46,7 @@ TEAM_COLORS: dict[str, tuple[str, str, str | None]] = {
     "frolunda_hc": ("#6B1D2A", "#FFD700", None),
     "frolunda": ("#6B1D2A", "#FFD700", None),
     "hc_frolunda": ("#6B1D2A", "#FFD700", None),
-    "hv71": ("#000000", "#FFD700", None),
+    "hv71": ("#FFD700", "#FFFFFF", "#003F7F"),
     "linkoping_hc": ("#003F6D", "#FFFFFF", None),
     "linkoping": ("#003F6D", "#FFFFFF", None),
     "lhc": ("#003F6D", "#FFFFFF", None),
