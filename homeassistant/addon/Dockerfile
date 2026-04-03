@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_8600
+ARG CACHEBUST=20260403_8700
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -813,8 +813,8 @@ _TEAM_COLORS = {
     "lulea": ("#CC0000", "#FFFFFF", "#004080"),
     "malmo_redhawks": ("#CC0000", "#1C1C1C", "#FFFFFF"),
     "malmo": ("#CC0000", "#1C1C1C", "#FFFFFF"),
-    "modo_hockey": ("#CC0000", "#FFFFFF", "#1C1C1C"),
-    "modo": ("#CC0000", "#FFFFFF", "#1C1C1C"),
+    "modo_hockey": ("#CC0000", "#FFFFFF", None),
+    "modo": ("#CC0000", "#FFFFFF", None),
     "rogle_bk": ("#CC0000", "#FFFFFF", "#003F7F"),
     "rogle": ("#CC0000", "#FFFFFF", "#003F7F"),
     "skelleftea_aik": ("#FFD700", "#1C1C1C", None),
@@ -1364,8 +1364,8 @@ TEAM_COLORS = {
     "lulea":                ("#CC0000", "#FFFFFF", "#004080"),
     "malmo_redhawks":       ("#CC0000", "#000000", "#FFFFFF"),
     "malmo":                ("#CC0000", "#000000", "#FFFFFF"),
-    "modo_hockey":          ("#CC0000", "#FFFFFF", "#000000"),
-    "modo":                 ("#CC0000", "#FFFFFF", "#000000"),
+    "modo_hockey":          ("#CC0000", "#FFFFFF", None),
+    "modo":                 ("#CC0000", "#FFFFFF", None),
     "rogle_bk":             ("#CC0000", "#FFFFFF", "#003F7F"),
     "rogle":                ("#CC0000", "#FFFFFF", "#003F7F"),
     "skelleftea_aik":       ("#FFD700", "#000000", None),
