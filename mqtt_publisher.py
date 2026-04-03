@@ -441,7 +441,7 @@ class MQTTPublisher:
                     "name": "Status",
                     "value_template": "{{ value_json.status }}",
                     "icon": "mdi:hockey-sticks",
-                    "json_attributes_topic": _attr_topic(watch_id),
+                    "json_attributes_topic": state_t,
                 },
             ),
             # Binary sensor: is a game live right now?
@@ -537,8 +537,8 @@ class MQTTPublisher:
             self._pub(topic, json.dumps(payload, ensure_ascii=False))
             discovery_topics.append(topic)
 
-        # Mark watch as online
-        self._pub(avail_t, "online")
+        # Mark watch as offline first so HA entity transitions unavailable→new-state on online
+        self._pub(avail_t, "offline")
 
         # Persist tracked discovery topics so we can clean them up on delete
         tracked = _load_entities()
@@ -577,8 +577,10 @@ class MQTTPublisher:
 
         self._state_hashes[watch_id] = h
         payload_json = json.dumps(state, ensure_ascii=False)
-        self._pub(_attr_topic(watch_id), payload_json)
         self._pub(_state_topic(watch_id), payload_json)
+        # Bring entity online AFTER state is in broker — ensures automations fire
+        # with fresh attributes already in the retained payload (same topic)
+        self._pub(_avail_topic(watch_id), "online")
         logger.info(
             "MQTT state: %s → status=%s score=%s",
             watch_id,

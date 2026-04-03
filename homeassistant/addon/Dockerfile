@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_6000
+ARG CACHEBUST=20260403_6100
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -564,7 +564,7 @@ class MQTTPublisher:
                     "name": "Status",
                     "value_template": "{{ value_json.status }}",
                     "icon": "mdi:hockey-sticks",
-                    "json_attributes_topic": _attr_topic(watch_id),
+                    "json_attributes_topic": state_t,
                 },
             ),
             # Binary sensor: is a game live right now?
@@ -660,8 +660,8 @@ class MQTTPublisher:
             self._pub(topic, json.dumps(payload, ensure_ascii=False))
             discovery_topics.append(topic)
 
-        # Mark watch as online
-        self._pub(avail_t, "online")
+        # Mark watch as offline first so HA entity transitions unavailable→new-state on online
+        self._pub(avail_t, "offline")
 
         # Persist tracked discovery topics so we can clean them up on delete
         tracked = _load_entities()
@@ -701,7 +701,9 @@ class MQTTPublisher:
         self._state_hashes[watch_id] = h
         payload_json = json.dumps(state, ensure_ascii=False)
         self._pub(_state_topic(watch_id), payload_json)
-        self._pub(_attr_topic(watch_id), payload_json)
+        # Bring entity online AFTER state is in broker — ensures automations fire
+        # with fresh attributes already in the retained payload (same topic)
+        self._pub(_avail_topic(watch_id), "online")
         logger.info(
             "MQTT state: %s → status=%s score=%s",
             watch_id,
@@ -822,7 +824,7 @@ _T = """\
         - "upcoming_far"
         - "idle"
     - platform: time_pattern
-      minutes: "/30"
+      minutes: "/5"
     - platform: homeassistant
       event: start
   condition:
@@ -982,7 +984,7 @@ _T = """\
       entity_id: sensor.hockeylive___SLUG___status
       to: "finished_today"
     - platform: time_pattern
-      minutes: "/10"
+      minutes: "/5"
     - platform: homeassistant
       event: start
   condition:
@@ -1166,7 +1168,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260403_6000
+ENV BUILD_ID=20260403_6100
 
 EXPOSE 8080
 
