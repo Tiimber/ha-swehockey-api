@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_7800
+ARG CACHEBUST=20260403_7900
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -880,13 +880,29 @@ def _team_draw_fragment(team_name):
                 break
     if colors:
         p, s, a = colors
-        acc = a if a else p
     else:
-        p, s, acc = "#444444", "#888888", "#444444"
-    return (
-        f'{{"df":[0,0,3,8,"{p}"]}},'
-        f'{{"df":[3,0,2,8,"{s}"]}},'
-        f'{{"df":[5,0,3,8,"{acc}"]}}')
+        p, s, a = "#444444", "#888888", None
+
+    parts = []
+
+    def seg(x0, y, x1, color):
+        if x0 > x1:
+            return
+        if x0 == x1:
+            parts.append(f'{{"dp":[{x0},{y},"{color}"]}}')
+        else:
+            parts.append(f'{{"dl":[{x0},{y},{x1},{y},"{color}"]}}')
+
+    for r in range(8):
+        if a is None:
+            seg(0, r, 7 - r, p)
+            seg(8 - r, r, 7, s)
+        else:
+            seg(0, r, min(7, 5 - r), p)
+            seg(max(0, 6 - r), r, min(7, 7 - r), s)
+            seg(max(0, 8 - r), r, 7, a)
+
+    return ",".join(parts)
 
 
 OPTIONS = Path("/data/options.json")

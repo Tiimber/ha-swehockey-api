@@ -107,7 +107,11 @@ def _tslug(name: str) -> str:
 
 
 def _team_draw_fragment(team_name: str) -> str:
-    """Return JSON draw-command objects (no brackets) for team jersey stripes."""
+    """Return JSON draw-command objects for diagonal team colors.
+
+    2 colors: upper-left triangle = primary, lower-right = secondary.
+    3 colors: upper-left = primary, 2-px diagonal stripe = secondary, lower-right = accent.
+    """
     slug = _tslug(team_name)
     colors = _TEAM_COLORS.get(slug)
     if not colors:
@@ -117,13 +121,31 @@ def _team_draw_fragment(team_name: str) -> str:
                 break
     if colors:
         p, s, a = colors
-        acc = a if a else p
     else:
-        p, s, acc = "#444444", "#888888", "#444444"
-    return (
-        f'{{"df":[0,0,3,8,"{p}"]}},{{"df":[3,0,2,8,"{s}"]}},{{"df":[5,0,3,8,"{acc}"]}}'
-    )
+        p, s, a = "#444444", "#888888", None
 
+    parts: list[str] = []
+
+    def seg(x0: int, y: int, x1: int, color: str) -> None:
+        if x0 > x1:
+            return
+        if x0 == x1:
+            parts.append(f'{{"dp":[{x0},{y},"{color}"]}}')
+        else:
+            parts.append(f'{{"dl":[{x0},{y},{x1},{y},"{color}"]}}')
+
+    for r in range(8):
+        if a is None:
+            # 2 colors: anti-diagonal col+row = 7
+            seg(0, r, 7 - r, p)
+            seg(8 - r, r, 7, s)
+        else:
+            # 3 colors: 2-pixel stripe at col+row in {6, 7}
+            seg(0, r, min(7, 5 - r), p)
+            seg(max(0, 6 - r), r, min(7, 7 - r), s)
+            seg(max(0, 8 - r), r, 7, a)
+
+    return ",".join(parts)
 
 OPTIONS = Path("/data/options.json")
 WATCHLIST = Path("/data/watchlist.json")
