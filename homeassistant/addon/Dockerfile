@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_7300
+ARG CACHEBUST=20260403_7400
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1261,27 +1261,33 @@ def make_icon_jpeg(primary, secondary, accent=None):
     p = tuple(int(primary.lstrip("#")[i:i+2], 16) for i in (0,2,4))
     s = tuple(int(secondary.lstrip("#")[i:i+2], 16) for i in (0,2,4))
     a = tuple(int(accent.lstrip("#")[i:i+2], 16) for i in (0,2,4)) if accent else None
-    img = Image.new("RGB", (8, 8), p)
+    palette_colors = [p, s, a if a else p]
+    flat = [c for rgb in palette_colors for c in rgb]
+    flat += [0] * (768 - len(flat))
+    img = Image.new("P", (8, 8))
+    img.putpalette(flat)
     px = img.load()
     for y in range(8):
-        px[3, y] = s
-        px[4, y] = s
+        for x in range(8):
+            px[x, y] = 0
+        px[3, y] = 1
+        px[4, y] = 1
         if a:
-            px[5, y] = a
-            px[6, y] = a
-            px[7, y] = a
+            px[5, y] = 2
+            px[6, y] = 2
+            px[7, y] = 2
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=100, subsampling=0)
+    img.save(buf, format="GIF")
     return buf.getvalue()
 
 def upload_icon(host, name, jpeg_bytes):
     import urllib.request
     boundary = "----HockeyLiveBoundary"
-    remote_path = f"/ICONS/{name}.jpg"
+    remote_path = f"/ICONS/{name}.gif"
     body = (
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="data"; filename="{remote_path}"\r\n'
-        f"Content-Type: image/jpeg\r\n\r\n"
+        f"Content-Type: image/gif\r\n\r\n"
     ).encode() + jpeg_bytes + f"\r\n--{boundary}--\r\n".encode()
     req = urllib.request.Request(f"http://{host}/edit", data=body, method="POST")
     req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
@@ -1308,7 +1314,7 @@ def main():
     for slug, colors in TEAM_COLORS.items():
         try:
             gif = make_icon_jpeg(*colors)
-            (out_dir / f"{slug}.jpg").write_bytes(gif)
+            (out_dir / f"{slug}.gif").write_bytes(gif)
             saved += 1
             if awtrix_host:
                 ok = upload_icon(awtrix_host, slug, gif)

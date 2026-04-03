@@ -159,7 +159,7 @@ def _hex_to_rgb(h: str) -> tuple[int, int, int]:
 
 def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> bytes:
     """
-    Generate an 8×8 jersey icon as JPEG bytes (quality=100, subsampling=0 = pixel-perfect).
+    Generate an 8×8 jersey icon as GIF bytes (lossless, pixel-perfect).
 
     Layout (columns):
       0-2  : primary
@@ -170,18 +170,25 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
     s = _hex_to_rgb(secondary)
     a = _hex_to_rgb(accent) if accent else None
 
-    img = Image.new("RGB", (8, 8), p)
+    img = Image.new("P", (8, 8))
+    # Build a minimal palette with exactly our colors
+    palette_colors = [p, s, a if a else p]
+    flat = [c for rgb in palette_colors for c in rgb]
+    flat += [0] * (768 - len(flat))
+    img.putpalette(flat)
     px = img.load()
     for y in range(8):
-        px[3, y] = s
-        px[4, y] = s
+        for x in range(8):
+            px[x, y] = 0  # primary
+        px[3, y] = 1  # secondary
+        px[4, y] = 1  # secondary
         if a:
-            px[5, y] = a
-            px[6, y] = a
-            px[7, y] = a
+            px[5, y] = 2  # accent
+            px[6, y] = 2
+            px[7, y] = 2
 
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=100, subsampling=0)
+    img.save(buf, format="GIF")
     return buf.getvalue()
 
 
@@ -193,7 +200,7 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
 def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
     """
     Upload icon to AWTRIX3 via its LittleFS web editor (/edit endpoint).
-    The icon will be stored at /ICONS/{icon_name}.jpg and referenced by
+    The icon will be stored at /ICONS/{icon_name}.gif and referenced by
     icon_name in custom app payloads.
 
     Returns True on success.
@@ -201,7 +208,7 @@ def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
     import urllib.request
 
     boundary = "----HockeyLiveBoundary7MA4YWxkTrZu0gW"
-    filename = f"{icon_name}.jpg"
+    filename = f"{icon_name}.gif"
     # AWTRIX3 stores icons in /ICONS/ on LittleFS
     remote_path = f"/ICONS/{filename}"
 
@@ -209,7 +216,7 @@ def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
         (
             f"--{boundary}\r\n"
             f'Content-Disposition: form-data; name="data"; filename="{remote_path}"\r\n'
-            f"Content-Type: image/jpeg\r\n\r\n"
+            f"Content-Type: image/gif\r\n\r\n"
         ).encode()
         + jpeg_bytes
         + f"\r\n--{boundary}--\r\n".encode()
@@ -270,7 +277,7 @@ def main() -> None:
         seen_slugs.add(slug)
         try:
             jpeg = make_icon_jpeg(primary, secondary, accent)
-            (out_dir / f"{slug}.jpg").write_bytes(jpeg)
+            (out_dir / f"{slug}.gif").write_bytes(jpeg)
             saved += 1
 
             if awtrix_host:
