@@ -157,9 +157,9 @@ def _hex_to_rgb(h: str) -> tuple[int, int, int]:
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
-def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> bytes:
+def make_icon_gif(primary: str, secondary: str, accent: str | None = None) -> bytes:
     """
-    Generate an 8×8 jersey chest-stripe icon as JPEG bytes.
+    Generate an 8×8 jersey icon as GIF bytes (lossless, pixel-perfect).
 
     Layout (columns):
       0-2  : primary
@@ -181,7 +181,7 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
             px[7, y] = a
 
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=100, subsampling=0)
+    img.save(buf, format="GIF")
     return buf.getvalue()
 
 
@@ -190,10 +190,10 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
 # ---------------------------------------------------------------------------
 
 
-def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
+def upload_icon(host: str, icon_name: str, gif_bytes: bytes) -> bool:
     """
     Upload icon to AWTRIX3 via its LittleFS web editor (/edit endpoint).
-    The icon will be stored at /ICONS/{icon_name}.jpg and referenced by
+    The icon will be stored at /ICONS/{icon_name}.gif and referenced by
     icon_name in custom app payloads.
 
     Returns True on success.
@@ -201,7 +201,7 @@ def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
     import urllib.request
 
     boundary = "----HockeyLiveBoundary7MA4YWxkTrZu0gW"
-    filename = f"{icon_name}.jpg"
+    filename = f"{icon_name}.gif"
     # AWTRIX3 stores icons in /ICONS/ on LittleFS
     remote_path = f"/ICONS/{filename}"
 
@@ -209,9 +209,9 @@ def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
         (
             f"--{boundary}\r\n"
             f'Content-Disposition: form-data; name="data"; filename="{remote_path}"\r\n'
-            f"Content-Type: image/jpeg\r\n\r\n"
+            f"Content-Type: image/gif\r\n\r\n"
         ).encode()
-        + jpeg_bytes
+        + gif_bytes
         + f"\r\n--{boundary}--\r\n".encode()
     )
 
@@ -235,6 +235,7 @@ def upload_icon(host: str, icon_name: str, jpeg_bytes: bytes) -> bool:
     except Exception as exc:
         print(f"[generate_icons] Upload {icon_name} failed: {exc}")
         return False
+
 
 
 # ---------------------------------------------------------------------------
@@ -269,12 +270,12 @@ def main() -> None:
             continue
         seen_slugs.add(slug)
         try:
-            jpeg = make_icon_jpeg(primary, secondary, accent)
-            (out_dir / f"{slug}.jpg").write_bytes(jpeg)
+            gif = make_icon_gif(primary, secondary, accent)
+            (out_dir / f"{slug}.gif").write_bytes(gif)
             saved += 1
 
             if awtrix_host:
-                ok = upload_icon(awtrix_host, slug, jpeg)
+                ok = upload_icon(awtrix_host, slug, gif)
                 if ok:
                     uploaded += 1
                     print(f"[generate_icons] ✓ {slug}")

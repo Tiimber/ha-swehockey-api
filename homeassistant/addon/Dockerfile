@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_7000
+ARG CACHEBUST=20260403_7100
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1257,7 +1257,7 @@ def team_slug(name):
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
 
-def make_icon_jpeg(primary, secondary, accent=None):
+def make_icon_gif(primary, secondary, accent=None):
     p = tuple(int(primary.lstrip("#")[i:i+2], 16) for i in (0,2,4))
     s = tuple(int(secondary.lstrip("#")[i:i+2], 16) for i in (0,2,4))
     a = tuple(int(accent.lstrip("#")[i:i+2], 16) for i in (0,2,4)) if accent else None
@@ -1271,21 +1271,22 @@ def make_icon_jpeg(primary, secondary, accent=None):
             px[6, y] = a
             px[7, y] = a
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=100, subsampling=0)
+    img.save(buf, format="GIF")
     return buf.getvalue()
 
-def upload_icon(host, name, jpeg_bytes):
+def upload_icon(host, name, gif_bytes):
     import urllib.request
     boundary = "----HockeyLiveBoundary"
-    remote_path = f"/ICONS/{name}.jpg"
+    remote_path = f"/ICONS/{name}.gif"
     body = (
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="data"; filename="{remote_path}"\r\n'
-        f"Content-Type: image/jpeg\r\n\r\n"
-    ).encode() + jpeg_bytes + f"\r\n--{boundary}--\r\n".encode()
+        f"Content-Type: image/gif\r\n\r\n"
+    ).encode() + gif_bytes + f"\r\n--{boundary}--\r\n".encode()
     req = urllib.request.Request(f"http://{host}/edit", data=body, method="POST")
     req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
     req.add_header("Content-Length", str(len(body)))
+
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return resp.status < 300
@@ -1306,11 +1307,11 @@ def main():
     uploaded = skipped = saved = 0
     for slug, colors in TEAM_COLORS.items():
         try:
-            jpeg = make_icon_jpeg(*colors)
-            (out_dir / f"{slug}.jpg").write_bytes(jpeg)
+            gif = make_icon_gif(*colors)
+            (out_dir / f"{slug}.gif").write_bytes(gif)
             saved += 1
             if awtrix_host:
-                ok = upload_icon(awtrix_host, slug, jpeg)
+                ok = upload_icon(awtrix_host, slug, gif)
                 if ok:
                     uploaded += 1
                     print(f"[generate_icons] OK: {slug}")
