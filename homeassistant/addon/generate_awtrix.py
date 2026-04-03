@@ -231,8 +231,8 @@ _T = """\
         payload: >-
           {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
           {%- set day = (ndt[8:10]|int(0))|string if ndt else '' -%}
-          {%- set dx = 12 if day|length == 1 else 10 -%}
-          {%- if day -%}{"draw":[__TEAMDRAW__,{"df":[9,0,9,2,"#CC0000"]},{"df":[9,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{%- endif -%}
+          {%- set dx = 26 if day|length == 1 else 24 -%}
+          {%- if day -%}{"draw":[__TEAMDRAW__,{"dt":[12,2,"@","#FFFFFF"]},{"df":[23,0,9,2,"#CC0000"]},{"df":[23,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{%- endif -%}
 
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
@@ -250,7 +250,7 @@ _T = """\
         {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
            and ndt is not none
            and (as_timestamp(ndt) - now().timestamp()) < 86400
-           and (as_timestamp(ndt) - now().timestamp()) > 21600
+           and (as_timestamp(ndt) - now().timestamp()) > 7200
            and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
   action:
     - variables:
@@ -281,7 +281,7 @@ _T = """\
         {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
         {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
            and ndt is not none
-           and (as_timestamp(ndt) - now().timestamp()) <= 21600
+           and (as_timestamp(ndt) - now().timestamp()) <= 7200
            and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
   action:
     - service: mqtt.publish

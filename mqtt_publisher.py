@@ -157,10 +157,10 @@ def _build_state(status_payload: dict) -> dict:
                 dt = _datetime.fromisoformat(next_dt_raw)
                 now_sthlm = _datetime.now(_ZoneInfo("Europe/Stockholm"))
                 secs_to_match = (dt - now_sthlm).total_seconds()
-                if secs_to_match <= 21600:
-                    status = "upcoming_prematch"  # ≤6h: show 0-0 scoreboard
+                if secs_to_match <= 7200:
+                    status = "upcoming_prematch"  # ≤2h: show 0-0 scoreboard
                 elif secs_to_match <= 86400:
-                    status = "upcoming_countdown"  # 6h–24h: show countdown
+                    status = "upcoming_countdown"  # 2h–24h: show countdown
                 else:
                     status = "upcoming_far"  # >24h: show calendar day
             except Exception:
