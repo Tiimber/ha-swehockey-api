@@ -100,14 +100,14 @@ _T = """\
           {{ [((as_timestamp(ndt) - now().timestamp()) / 60)|int, 0]|max if ndt else 0 }}
         cdtext: >
           {%- set m = mins_left|int -%}
-          {%- if m >= 60 -%}{{ (m // 60)|string }}h {{ (m % 60)|string }}min
-          {%- elif m > 0 -%}{{ m }}min
+          {%- if m >= 60 -%}{{ '%d:%02d'|format(m // 60, m % 60) }}
+          {%- elif m > 0 -%}0:{{ '%02d'|format(m) }}
           {%- else -%}Nu!{%- endif -%}
     - service: mqtt.publish
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
-          {"icon":"__ICON__","text":[{"t":"{{ state_attr('sensor.hockeylive___SLUG___status','next_time') }} ","c":"FFD700"},{"t":"{{ cdtext }}","c":"FFFFFF"}],"duration":10,"lifetime":120}
+          {"icon":"__ICON__","text":[{"t":"{{ cdtext }}","c":"FFFFFF"}],"duration":10,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Live scoreboard"
   id: "awtrix___WID___live"
