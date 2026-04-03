@@ -118,9 +118,8 @@ def _team_draw_fragment(team_name: str) -> str:
     else:
         p, s, acc = "#444444", "#888888", "#444444"
     return (
-        f'{{"df":[0,0,3,8,"{p}"]}},'
-        f'{{"df":[3,0,2,8,"{s}"]}},'
-        f'{{"df":[5,0,3,8,"{acc}"]}}')
+        f'{{"df":[0,0,3,8,"{p}"]}},{{"df":[3,0,2,8,"{s}"]}},{{"df":[5,0,3,8,"{acc}"]}}'
+    )
 
 
 OPTIONS = Path("/data/options.json")
