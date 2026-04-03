@@ -2,11 +2,10 @@
 """
 generate_icons.py — Generate and upload 8×8 team icons to AWTRIX3.
 
-Design: Jersey chest-stripe pattern (8px wide × 8px tall)
-  rows 0-2 : primary color
-  rows 3-4 : secondary color (chest stripe)
-  rows 5   : accent color if 3 colors, else primary
-  rows 6-7 : primary color
+Design: Jersey vertical-stripe pattern (8px wide × 8px tall)
+  cols 0-2 : primary color
+  cols 3-4 : secondary color (chest stripe)
+  cols 5-7 : accent color if 3 colors, else primary
 
 Upload: POST multipart to http://{awtrix_host}/edit (AWTRIX3 LittleFS editor)
         Icons are stored as /ICONS/{slug}.jpg and referenced by name in payloads.
@@ -162,7 +161,7 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
     """
     Generate an 8×8 jersey chest-stripe icon as JPEG bytes.
 
-    Layout (rows):
+    Layout (columns):
       0-2  : primary
       3-4  : secondary
       5-7  : accent (if given) else primary
@@ -173,13 +172,13 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
 
     img = Image.new("RGB", (8, 8), p)
     px = img.load()
-    for x in range(8):
-        px[x, 3] = s
-        px[x, 4] = s
+    for y in range(8):
+        px[3, y] = s
+        px[4, y] = s
         if a:
-            px[x, 5] = a
-            px[x, 6] = a
-            px[x, 7] = a
+            px[5, y] = a
+            px[6, y] = a
+            px[7, y] = a
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=100)
