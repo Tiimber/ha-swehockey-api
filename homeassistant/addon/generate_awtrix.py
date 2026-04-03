@@ -64,8 +64,9 @@ _T = """\
   condition:
     - condition: template
       value_template: >
+        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
         {{ states('sensor.hockeylive___SLUG___status') in ['upcoming','idle']
-           and not state_attr('sensor.hockeylive___SLUG___status', 'next_today') }}
+           and (ndt is none or (as_timestamp(ndt) - now().timestamp()) >= 86400) }}
   action:
     - service: mqtt.publish
       data:
@@ -87,8 +88,10 @@ _T = """\
   condition:
     - condition: template
       value_template: >
+        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
         {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
-           and state_attr('sensor.hockeylive___SLUG___status', 'next_today') == true
+           and ndt is not none
+           and (as_timestamp(ndt) - now().timestamp()) < 86400
            and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
   action:
     - variables:

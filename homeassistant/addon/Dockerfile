@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260402_4300
+ARG CACHEBUST=20260403_4400
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -805,8 +805,9 @@ _T = """\
   condition:
     - condition: template
       value_template: >
+        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
         {{ states('sensor.hockeylive___SLUG___status') in ['upcoming','idle']
-           and not state_attr('sensor.hockeylive___SLUG___status', 'next_today') }}
+           and (ndt is none or (as_timestamp(ndt) - now().timestamp()) >= 86400) }}
   action:
     - service: mqtt.publish
       data:
@@ -828,8 +829,10 @@ _T = """\
   condition:
     - condition: template
       value_template: >
+        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
         {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
-           and state_attr('sensor.hockeylive___SLUG___status', 'next_today') == true
+           and ndt is not none
+           and (as_timestamp(ndt) - now().timestamp()) < 86400
            and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
   action:
     - variables:
@@ -1114,7 +1117,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260402_4300
+ENV BUILD_ID=20260403_4400
 
 EXPOSE 8080
 
