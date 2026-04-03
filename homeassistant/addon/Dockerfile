@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_5600
+ARG CACHEBUST=20260403_5700
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -800,6 +800,9 @@ _T = """\
   trigger:
     - platform: state
       entity_id: sensor.hockeylive___SLUG___status
+    - platform: state
+      entity_id: sensor.hockeylive___SLUG___status
+      attribute: next_datetime
     - platform: time_pattern
       minutes: "/30"
     - platform: homeassistant
@@ -827,6 +830,9 @@ _T = """\
       minutes: "/1"
     - platform: state
       entity_id: sensor.hockeylive___SLUG___status
+    - platform: state
+      entity_id: sensor.hockeylive___SLUG___status
+      attribute: next_datetime
     - platform: homeassistant
       event: start
   condition:
@@ -859,6 +865,9 @@ _T = """\
       minutes: "/1"
     - platform: state
       entity_id: sensor.hockeylive___SLUG___status
+    - platform: state
+      entity_id: sensor.hockeylive___SLUG___status
+      attribute: next_datetime
     - platform: homeassistant
       event: start
   condition:
@@ -1163,7 +1172,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260403_5600
+ENV BUILD_ID=20260403_5700
 
 EXPOSE 8080
 
