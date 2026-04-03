@@ -232,13 +232,13 @@ _T = """\
           {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
           {%- set day = (ndt[8:10]|int(0))|string if ndt else '' -%}
           {%- set dx = 26 if day|length == 1 else 24 -%}
-          {%- if day -%}{"draw":[__TEAMDRAW__,{"dl":[12,1,15,1,"#FFFFFF"]},{"dp":[11,2,"#FFFFFF"]},{"dp":[16,2,"#FFFFFF"]},{"dp":[11,3,"#FFFFFF"]},{"dl":[13,3,14,3,"#FFFFFF"]},{"dp":[16,3,"#FFFFFF"]},{"dp":[11,4,"#FFFFFF"]},{"dp":[13,4,"#FFFFFF"]},{"dp":[16,4,"#FFFFFF"]},{"dp":[11,5,"#FFFFFF"]},{"dl":[13,5,16,5,"#FFFFFF"]},{"dp":[11,6,"#FFFFFF"]},{"dl":[12,7,15,7,"#FFFFFF"]},{"df":[23,0,9,2,"#CC0000"]},{"df":[23,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{%- endif -%}
+          {%- if day -%}{"draw":[__TEAMDRAW__,{"dl":[13,1,16,1,"#FFFFFF"]},{"dp":[12,2,"#FFFFFF"]},{"dp":[17,2,"#FFFFFF"]},{"dp":[12,3,"#FFFFFF"]},{"dl":[14,3,15,3,"#FFFFFF"]},{"dp":[17,3,"#FFFFFF"]},{"dp":[12,4,"#FFFFFF"]},{"dp":[14,4,"#FFFFFF"]},{"dp":[17,4,"#FFFFFF"]},{"dp":[12,5,"#FFFFFF"]},{"dl":[14,5,17,5,"#FFFFFF"]},{"dp":[12,6,"#FFFFFF"]},{"dl":[13,7,16,7,"#FFFFFF"]},{"df":[23,0,9,2,"#CC0000"]},{"df":[23,2,9,6,"#FFFFFF"]},{"dt":[{{ dx }},2,"{{ day }}","#000000"]}],"noScroll":true,"duration":10,"lifetime":600}{%- else -%}{%- endif -%}
 
 - alias: "AWTRIX __NAME__ - Nedrakning till match"
   id: "awtrix___WID___countdown"
   trigger:
     - platform: time_pattern
-      seconds: "/2"
+      minutes: "/1"
     - platform: state
       entity_id: sensor.hockeylive___SLUG___status
     - platform: homeassistant
@@ -253,19 +253,16 @@ _T = """\
            and (as_timestamp(ndt) - now().timestamp()) > 7200
            and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
   action:
-    - variables:
-        mins_left: >
-          {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
-          {{ [((as_timestamp(ndt) - now().timestamp()) / 60)|int, 0]|max if ndt else 0 }}
-        cdtext: >
-          {%- set m = mins_left|int -%}
-          {%- set sep = ':' if now().second % 2 == 0 else ' ' -%}
-          {{ '%d'|format(m // 60) ~ sep ~ '%02d'|format(m % 60) }}
     - service: mqtt.publish
       data:
         topic: "__PREFIX__/custom/__APP__"
         payload: >-
-          {"draw":[__TEAMDRAW__],"text":[{"t":"{{ cdtext }}","c":"FFFFFF"}],"duration":10,"lifetime":120}
+          {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
+          {%- set mins = [((as_timestamp(ndt) - now().timestamp()) / 60)|int, 0]|max if ndt else 0 -%}
+          {%- set hrs = mins // 60 -%}
+          {%- set tx = 9 if hrs >= 10 else 14 -%}
+          {%- set cdtext = '%d:%02d'|format(hrs, mins % 60) -%}
+          {"draw":[__TEAMDRAW__,{"dt":[{{ tx }},1,"{{ cdtext }}","#FFFFFF"]}],"noScroll":true,"duration":10,"lifetime":120}
 
 - alias: "AWTRIX __NAME__ - Prematch scoreboard"
   id: "awtrix___WID___prematch"
