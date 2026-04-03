@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260403_4800
+ARG CACHEBUST=20260403_4900
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && curl -fsSL "${REPO_URL}" \
@@ -37,6 +37,7 @@ RUN echo "Cache bust: ${CACHEBUST}" \
 COPY <<'EOF' /app/run.sh
 #!/bin/sh
 set -e
+echo "[HockeyLive] Build: ${BUILD_ID}"
 echo "[HockeyLive] Generating config from add-on options..."
 python3 /app/generate_config.py
 echo "[HockeyLive] Generating AWTRIX automations..."
@@ -1143,7 +1144,7 @@ RUN chmod +x /app/run.sh
 
 # /data is mounted by the Supervisor — config.yaml and watchlist.json live there
 ENV HOCKEY_CONFIG=/data/config.yaml
-ENV BUILD_ID=20260403_4800
+ENV BUILD_ID=20260403_4900
 
 EXPOSE 8080
 
