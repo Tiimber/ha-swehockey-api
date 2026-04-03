@@ -147,6 +147,7 @@ def _team_draw_fragment(team_name: str) -> str:
 
     return ",".join(parts)
 
+
 OPTIONS = Path("/data/options.json")
 WATCHLIST = Path("/data/watchlist.json")
 OUT_FILE = Path("/config/packages/hockeylive_awtrix.yaml")
