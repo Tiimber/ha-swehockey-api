@@ -164,22 +164,25 @@ def make_icon_jpeg(primary: str, secondary: str, accent: str | None = None) -> b
 
     Layout (rows):
       0-2  : primary
-      3    : secondary
-      4    : accent if given, else secondary
-      5-7  : primary
+      3-4  : secondary
+      5-7  : accent (if given) else primary
     """
     p = _hex_to_rgb(primary)
     s = _hex_to_rgb(secondary)
-    a = _hex_to_rgb(accent) if accent else s
+    a = _hex_to_rgb(accent) if accent else None
 
     img = Image.new("RGB", (8, 8), p)
     px = img.load()
     for x in range(8):
         px[x, 3] = s
-        px[x, 4] = a
+        px[x, 4] = s
+        if a:
+            px[x, 5] = a
+            px[x, 6] = a
+            px[x, 7] = a
 
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=95)
+    img.save(buf, format="JPEG", quality=100)
     return buf.getvalue()
 
 
