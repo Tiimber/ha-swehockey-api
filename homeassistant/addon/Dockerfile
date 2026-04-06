@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9980
+ARG CACHEBUST=20260406_9990
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1332,12 +1332,10 @@ _BUTTON_AUTOMATIONS = """\
               data:
                 topic: "__PREFIX__/notify"
                 payload: >-
-                  __AWTRIX_DRAW_HDR__{%- set _ht = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default(state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'last_home_team')) | default('') | string -%}
-                  {%- set _hslug = _ts(_ht) -%}
-                  {%- set _hd = _ld[_hslug] if _hslug in _ld else _fl -%}
                   {%- set goal_iter = goals if status == 'finished_today' else (goals | reverse | list) -%}
-                  {%- set ns = namespace(parts=[]) -%}
+                  {%- set ns = namespace(segs=[]) -%}
                   {%- for g in goal_iter -%}
+                  {%- if not loop.first -%}{%- set ns.segs = ns.segs + ['{"t":"   ","c":"FFFFFF"}'] -%}{%- endif -%}
                   {%- set sc = g.scorer | default('?') -%}
                   {%- set hs = g.home_score_after | default(0) | int -%}
                   {%- set as_ = g.away_score_after | default(0) | int -%}
@@ -1345,9 +1343,9 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set clk = g.period_clock | default('') -%}
                   {%- set sit = g.situation | default('') -%}
                   {%- set sit_str = ' ' ~ sit if sit not in ['EQ','ES',''] else '' -%}
-                  {%- set ns.parts = ns.parts + [(hs | string) ~ '-' ~ (as_ | string) ~ ' ' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str] -%}
+                  {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '-' ~ as_ ~ ' ","c":"FFD700"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
                   {%- endfor -%}
-                  {"draw":[{{ _hd }}],"text":"     {{ ns.parts | join('   ') }}","duration":20,"stack":false}
+                  {"text":[{{ ns.segs | join(',') }}],"duration":20,"stack":false}
 """
 
 
