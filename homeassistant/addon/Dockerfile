@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9997
+ARG CACHEBUST=20260406_9998
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -302,10 +302,10 @@ def _build_state(status_payload: dict) -> dict:
                 secs_to_match = (dt - now_sthlm).total_seconds()
                 if secs_to_match <= 7200:
                     status = "upcoming_prematch"   # ≤2h: show 0-0 scoreboard
-                elif secs_to_match <= 86400:
-                    status = "upcoming_countdown"  # 2h–24h: show countdown
+                elif dt.date() == now_sthlm.date():
+                    status = "upcoming_countdown"  # match day, >2h: show countdown
                 else:
-                    status = "upcoming_far"        # >24h: show calendar day
+                    status = "upcoming_far"        # not today: show calendar day
             except Exception:
                 status = "upcoming_far"
         else:
