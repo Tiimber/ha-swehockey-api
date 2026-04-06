@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9400
+ARG CACHEBUST=20260406_9500
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1241,6 +1241,17 @@ input_text:
 # These are appended once (not per watch) and use __PREFIX__ substitution.
 # ---------------------------------------------------------------------------
 _BUTTON_AUTOMATIONS = """\
+- alias: "AWTRIX - Blockera inbyggd knappnavigering"
+  id: "awtrix_block_nav_keys"
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "__PREFIX__/settings"
+        payload: '{"BLOCKN":true}'
+
 - alias: "AWTRIX - Knapp: visa detaljer"
   id: "awtrix_button_details"
   mode: single

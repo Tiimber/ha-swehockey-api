@@ -458,6 +458,17 @@ input_text:
 # These are appended once (not per watch) and use __PREFIX__ substitution.
 # ---------------------------------------------------------------------------
 _BUTTON_AUTOMATIONS = """\
+- alias: "AWTRIX - Blockera inbyggd knappnavigering"
+  id: "awtrix_block_nav_keys"
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "__PREFIX__/settings"
+        payload: '{"BLOCKN":true}'
+
 - alias: "AWTRIX - Knapp: visa detaljer"
   id: "awtrix_button_details"
   mode: single
