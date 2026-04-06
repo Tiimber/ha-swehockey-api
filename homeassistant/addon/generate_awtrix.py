@@ -122,9 +122,7 @@ def _text_color_for(bg_hex: str) -> str:
     return "#000000" if _luminance(bg_hex) > 0.179 else "#ffffff"
 
 
-def _pixel_bg_color(
-    x: int, y: int, colors: tuple | None, x_offset: int
-) -> str:
+def _pixel_bg_color(x: int, y: int, colors: tuple | None, x_offset: int) -> str:
     """Return the logo color painted at pixel (x, y) for the given team."""
     if not colors:
         p, s, a = "#444444", "#888888", None
@@ -167,7 +165,7 @@ def _abbr_pixels(abbr: str, x_off: int, colors: tuple | None) -> list[str]:
                 if row_bits & (0b100 >> dx):
                     bg = _pixel_bg_color(px + dx, py + dy, colors, x_off)
                     text_col = _text_color_for(bg)
-                    parts.append(f'{{"dp":[{px + dx},{py + dy},"{text_col}"]}}')
+                    parts.append(f'{{"df":[{px + dx},{py + dy},1,1,"{text_col}"]}}')
     return parts
 
 
