@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9600
+ARG CACHEBUST=20260406_9700
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -175,6 +175,7 @@ from zoneinfo import ZoneInfo as _ZoneInfo
 logger = logging.getLogger(__name__)
 
 ENTITIES_FILE = Path("/data/mqtt_entities.json")
+GOALS_CACHE_FILE = Path("/data/goals_cache.json")
 MQTT_PREFIX = "hockeylive"
 DISCOVERY_PREFIX = "homeassistant"
 
@@ -234,6 +235,24 @@ def _save_entities(data: dict) -> None:
         )
     except Exception as exc:
         logger.error("Failed to save mqtt_entities.json: %s", exc)
+
+
+def _load_goals_cache() -> dict:
+    if GOALS_CACHE_FILE.exists():
+        try:
+            return json.loads(GOALS_CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_goals_cache(data: dict) -> None:
+    try:
+        GOALS_CACHE_FILE.write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception as exc:
+        logger.error("Failed to save goals_cache.json: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +408,7 @@ class MQTTPublisher:
         self._client = None
         self._connected = False
         self._state_hashes: dict[str, str] = {}
-        self._goals_cache: dict[str, list] = {}  # persists goals after game ends
+        self._goals_cache: dict = _load_goals_cache()  # persists goals after game ends
 
     # ------------------------------------------------------------------
     # Connection lifecycle
@@ -699,6 +718,7 @@ class MQTTPublisher:
         # Cache goals while game is live; restore them for finished_today
         if state.get("status", "").startswith("live") and state.get("goals"):
             self._goals_cache[watch_id] = state["goals"]
+            _save_goals_cache(self._goals_cache)
         if state.get("status") == "finished_today":
             cached = self._goals_cache.get(watch_id, [])
             state["goals"] = cached
