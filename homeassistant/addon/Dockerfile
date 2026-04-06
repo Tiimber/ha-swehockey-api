@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9990
+ARG CACHEBUST=20260406_9991
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1333,6 +1333,7 @@ _BUTTON_AUTOMATIONS = """\
                 topic: "__PREFIX__/notify"
                 payload: >-
                   {%- set goal_iter = goals if status == 'finished_today' else (goals | reverse | list) -%}
+                  {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default(state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'last_home_team')) | default('') | string -%}
                   {%- set ns = namespace(segs=[]) -%}
                   {%- for g in goal_iter -%}
                   {%- if not loop.first -%}{%- set ns.segs = ns.segs + ['{"t":"   ","c":"FFFFFF"}'] -%}{%- endif -%}
@@ -1343,7 +1344,12 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set clk = g.period_clock | default('') -%}
                   {%- set sit = g.situation | default('') -%}
                   {%- set sit_str = ' ' ~ sit if sit not in ['EQ','ES',''] else '' -%}
-                  {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '-' ~ as_ ~ ' ","c":"FFD700"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
+                  {%- set gt = g.team | default('') -%}
+                  {%- if gt == home_t -%}
+                  {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '-","c":"FFD700"}', '{"t":"' ~ as_ ~ ' ","c":"FFFFFF"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
+                  {%- else -%}
+                  {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '-","c":"FFFFFF"}', '{"t":"' ~ as_ ~ ' ","c":"FFD700"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
+                  {%- endif -%}
                   {%- endfor -%}
                   {"text":[{{ ns.segs | join(',') }}],"duration":20,"stack":false}
 """
