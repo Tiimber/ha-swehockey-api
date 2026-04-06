@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_8900
+ARG CACHEBUST=20260406_9000
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -781,6 +781,10 @@ Per watch (when awtrix: true) the following automations are created:
   4. Goal notification   – 30-second notify with scorer / assists / situation
   5. Match finished      – final score + period dots coloured green/red
   6. Midnight clear      – removes the custom app at 00:00:30
+
+Global (once per prefix):
+  7. Track active app    – mirrors AWTRIX currentApp MQTT → input_text
+  8. Middle button       – cycles through goal history when on a scoreboard
 """
 
 import json
@@ -1182,6 +1186,108 @@ _T = """\
 """
 
 
+# ---------------------------------------------------------------------------
+# Global helpers – input_number / input_text written once per generated file.
+# ---------------------------------------------------------------------------
+_HELPERS_BLOCK = """\
+input_number:
+  awtrix_goal_idx:
+    name: "AWTRIX Mål-index"
+    min: 0
+    max: 99
+    step: 1
+    initial: 0
+
+input_text:
+  awtrix_current_app:
+    name: "AWTRIX Aktiv app"
+    max: 64
+    initial: ""
+  awtrix_goal_app:
+    name: "AWTRIX Mål app"
+    max: 64
+    initial: ""
+
+"""
+
+# ---------------------------------------------------------------------------
+# Global automations – track current app + middle-button goal history browser.
+# These are appended once (not per watch) and use __PREFIX__ substitution.
+# ---------------------------------------------------------------------------
+_BUTTON_AUTOMATIONS = """\
+- alias: "AWTRIX - Spåra aktiv app"
+  id: "awtrix_track_active_app"
+  mode: queued
+  max: 5
+  trigger:
+    - platform: mqtt
+      topic: "__PREFIX__/stats/currentApp"
+  action:
+    - service: input_text.set_value
+      target:
+        entity_id: input_text.awtrix_current_app
+      data:
+        value: "{{ trigger.payload }}"
+
+- alias: "AWTRIX - Knapp: visa målhistorik"
+  id: "awtrix_button_goal_history"
+  mode: single
+  max_exceeded: silent
+  trigger:
+    - platform: mqtt
+      topic: "__PREFIX__/stats/buttonSelect"
+      payload: "1"
+  variables:
+    current_app: "{{ states('input_text.awtrix_current_app') }}"
+    slug: "{{ current_app[7:] if current_app.startswith('hockey_') else '' }}"
+    is_hockey: "{{ slug != '' }}"
+    goals: >
+      {{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals')
+         if slug != '' else [] }}
+    n: "{{ (goals or []) | length }}"
+    last_app: "{{ states('input_text.awtrix_goal_app') }}"
+    cur_idx: "{{ states('input_number.awtrix_goal_idx') | int(0) }}"
+    new_idx: >
+      {{ 0 if last_app != current_app
+         else ((cur_idx + 1) % ([n | int, 1] | max)) }}
+    goal: "{{ (goals or [])[-(new_idx | int + 1)] if (n | int) > 0 else none }}"
+  condition:
+    - "{{ is_hockey }}"
+  action:
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.awtrix_goal_idx
+      data:
+        value: "{{ new_idx | int }}"
+    - service: input_text.set_value
+      target:
+        entity_id: input_text.awtrix_goal_app
+      data:
+        value: "{{ current_app }}"
+    - choose:
+        - conditions:
+            - "{{ (n | int) == 0 }}"
+          sequence:
+            - service: mqtt.publish
+              data:
+                topic: "__PREFIX__/notify"
+                payload: '{"text":"Inga m\u00e5l","duration":5,"stack":false}'
+      default:
+        - service: mqtt.publish
+          data:
+            topic: "__PREFIX__/notify"
+            payload: >-
+              {%- set sc = goal.scorer | default('?') -%}
+              {%- set ass = goal.assists | default([]) -%}
+              {%- set sit = goal.situation | default('') -%}
+              {%- set per = goal.period | default('') -%}
+              {%- set clk = goal.period_clock | default('') -%}
+              {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
+              {%- set gn = (n | int) - (new_idx | int) -%}
+              {"text":[{"t":"M\u00e5l {{ gn }}/{{ n }} ","c":"888888"},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" Ass: {{ ass | join(', ') }}","c":"888888"}{% endif %},{"t":" {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"duration":15,"stack":false}
+"""
+
+
 def main() -> None:
     if not OPTIONS.exists():
         print("[generate_awtrix] /data/options.json not found – skipping")
@@ -1270,8 +1376,11 @@ def main() -> None:
             )
         )
 
+    # Append global button automations (once per prefix, not per watch)
+    automation_blocks.append(_sub(_BUTTON_AUTOMATIONS, PREFIX=prefix))
+
     # Write as HA Package (works alongside any existing automation: !include setup)
-    header = "\n".join(
+    preamble = "\n".join(
         [
             "# Auto-generated by HockeyLive add-on – do not edit manually",
             "# Re-generated on every add-on restart",
@@ -1280,7 +1389,6 @@ def main() -> None:
             "#   homeassistant:",
             "#     packages: !include_dir_named packages/",
             "",
-            "automation:",
         ]
     )
     # Indent each automation block so it becomes a YAML list under "automation:"
@@ -1295,7 +1403,10 @@ def main() -> None:
                 indented.append("  " + line)
         indented.append("")
 
-    OUT_FILE.write_text(header + "\n" + "\n".join(indented), encoding="utf-8")
+    OUT_FILE.write_text(
+        preamble + _HELPERS_BLOCK + "automation:\n" + "\n".join(indented),
+        encoding="utf-8",
+    )
     print(f"[generate_awtrix] {len(enabled)} enabled + {len(disabled)} disabled → {OUT_FILE}")
     print(
         f"[generate_awtrix] Prefix: {prefix}, Watches: {[w.get('name') or w['team'] for w in enabled]}"
