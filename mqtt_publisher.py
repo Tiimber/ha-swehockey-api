@@ -603,7 +603,7 @@ class MQTTPublisher:
                 if cached:
                     self._goals_cache[watch_id] = cached
                     _save_goals_cache(self._goals_cache)
-            state["goals"] = cached
+            state["goals"] = list(reversed(cached))
             state["goals_count"] = len(cached)
 
         h = _state_hash(state)

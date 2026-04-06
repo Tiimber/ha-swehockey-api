@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9900
+ARG CACHEBUST=20260406_9910
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -727,7 +727,7 @@ class MQTTPublisher:
                 if cached:
                     self._goals_cache[watch_id] = cached
                     _save_goals_cache(self._goals_cache)
-            state["goals"] = cached
+            state["goals"] = list(reversed(cached))
             state["goals_count"] = len(cached)
 
         h = _state_hash(state)
