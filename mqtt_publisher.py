@@ -597,6 +597,12 @@ class MQTTPublisher:
             _save_goals_cache(self._goals_cache)
         if state.get("status") == "finished_today":
             cached = self._goals_cache.get(watch_id, [])
+            if not cached:
+                # Fallback: app.py fetched goals from Game/Events for finished match
+                cached = status_payload.get("last_match", {}).get("goals", [])
+                if cached:
+                    self._goals_cache[watch_id] = cached
+                    _save_goals_cache(self._goals_cache)
             state["goals"] = cached
             state["goals_count"] = len(cached)
 

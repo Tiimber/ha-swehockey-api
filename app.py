@@ -71,6 +71,10 @@ STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 
 _schedule_cache: dict[int, dict] = {}
 
+# Cache of goals for matches that finished today, keyed by game_id.
+# Populated on first request after the game ends; survives across polls.
+_finished_game_goals_cache: dict[int, list] = {}
+
 # Poll intervals (seconds)
 CACHE_TTL_LIVE = 30  # game in progress
 CACHE_TTL_GAME_DAY = 3600  # game scheduled today, not yet started
@@ -1152,13 +1156,27 @@ def _team_status_payload(team: str, season_ids: list[int], cfg: dict) -> dict:
         else None
     )
 
+    # Build last_match dict; if it was today, enrich with goal-by-goal breakdown
+    # so that finished_today matches can show goal history even after a restart.
+    last_data: Optional[dict] = None
+    if last_game:
+        last_data = _game_to_dict(last_game, fake_cfg)
+        today_str = now.strftime("%Y-%m-%d")
+        if last_game.get("date") == today_str:
+            gid = last_game.get("game_id")
+            if gid and gid not in _finished_game_goals_cache:
+                ev = scraper.fetch_game_events(gid)
+                _finished_game_goals_cache[gid] = ev.get("goals", [])
+            if gid is not None:
+                last_data["goals"] = _finished_game_goals_cache.get(gid, [])
+
     return {
         "team": team,
         "season_ids": season_ids,
         "updated_at": now.isoformat(),
         "live": live_data,
         "next_match": _game_to_dict(next_game, fake_cfg) if next_game else None,
-        "last_match": _game_to_dict(last_game, fake_cfg) if last_game else None,
+        "last_match": last_data,
     }
 
 
