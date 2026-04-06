@@ -554,7 +554,7 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
                   {%- set _gslug = _ts(gt) -%}
                   {%- set _gd = _ld[_gslug] if _gslug in _ld else _fl -%}
-                  {"draw":[{{ _gd }}],"text":[{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" ({{ ass | join(', ') }})","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %},{"t":" - ","c":"555555"},{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}","c":"FFD700"}{% endif %}],"repeat":2,"stack":false}
+                  {"draw":[{{ _gd }}],"text":[{"t":" ","c":"000000"},{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}: ","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}: ","c":"FFD700"}{% endif %},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" ({{ ass | join(', ') }})","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"repeat":2,"stack":false}
 """
 
 
