@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9992
+ARG CACHEBUST=20260406_9993
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1332,7 +1332,7 @@ _BUTTON_AUTOMATIONS = """\
               data:
                 topic: "__PREFIX__/notify"
                 payload: >-
-                  {%- set goal_iter = goals if status == 'finished_today' else (goals | reverse | list) -%}
+                  {%- set goal_iter = goals | sort(attribute='game_time_secs') if status == 'finished_today' else goals | sort(attribute='game_time_secs', reverse=true) -%}
                   {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default(state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'last_home_team')) | default('') | string -%}
                   {%- set ns = namespace(segs=[]) -%}
                   {%- for g in goal_iter -%}
