@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9930
+ARG CACHEBUST=20260406_9940
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1288,6 +1288,8 @@ _BUTTON_AUTOMATIONS = """\
       payload: "0"
   variables:
     current_app: "{{ states('sensor.awtrix_current_app') }}"
+    last_app: "{{ states('input_text.awtrix_goal_app') }}"
+    cur_idx: "{{ states('input_number.awtrix_goal_idx') | int(0) }}"
     slug: >
       {{ last_app[7:] if last_app.startswith('hockey_')
          else (current_app[7:] if current_app.startswith('hockey_') else '') }}
@@ -1298,8 +1300,6 @@ _BUTTON_AUTOMATIONS = """\
       {{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals')
          if slug != '' else [] }}
     n: "{{ (goals or []) | length }}"
-    last_app: "{{ states('input_text.awtrix_goal_app') }}"
-    cur_idx: "{{ states('input_number.awtrix_goal_idx') | int(0) }}"
     new_idx: >
       {{ 0 if last_app != ('hockey_' ~ slug)
          else ((cur_idx + 1) % ([n | int, 1] | max)) }}
