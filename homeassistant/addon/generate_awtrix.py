@@ -471,8 +471,7 @@ _BUTTON_AUTOMATIONS = """\
 
 - alias: "AWTRIX - Knapp: visa detaljer"
   id: "awtrix_button_details"
-  mode: single
-  max_exceeded: silent
+  mode: restart
   trigger:
     - platform: mqtt
       topic: "__PREFIX__/stats/buttonSelect"
@@ -480,15 +479,12 @@ _BUTTON_AUTOMATIONS = """\
   variables:
     current_app: "{{ states('sensor.awtrix_current_app') }}"
     last_app: "{{ states('input_text.awtrix_goal_app') }}"
-    cur_idx: "{{ states('input_number.awtrix_goal_idx') | int(0) }}"
     slug: "{{ (current_app[7:] if current_app.startswith('hockey_') else (last_app[7:] if last_app.startswith('hockey_') else '')) | trim }}"
     is_hockey: "{{ slug != '' }}"
     status: "{{ states('sensor.hockeylive_' ~ slug ~ '_status') if slug != '' else '' }}"
     is_upcoming: "{{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}"
     goals: "{{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals') if slug != '' else [] }}"
     n: "{{ (goals or []) | length }}"
-    new_idx: "{{ 0 if (not last_app.startswith('hockey_') or last_app[7:] != slug) else ((cur_idx + 1) % ([n | int, 1] | max)) }}"
-    goal: "{{ (goals or [])[-(new_idx | int + 1)] if (n | int) > 0 else none }}"
   condition:
     - "{{ is_hockey }}"
   action:
@@ -509,11 +505,6 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set _nad = _rd[_naslug] if _naslug in _rd else _fr -%}
                   {"draw":[{{ _nhd }},{{ _nad }}],"text":[{"t":"@ ","c":"888888"},{"t":"{{ _nt }}","c":"FFD700"}],"duration":10,"stack":false}
       default:
-        - service: input_number.set_value
-          target:
-            entity_id: input_number.awtrix_goal_idx
-          data:
-            value: "{{ new_idx | int }}"
         - service: input_text.set_value
           target:
             entity_id: input_text.awtrix_goal_app
@@ -532,20 +523,22 @@ _BUTTON_AUTOMATIONS = """\
               data:
                 topic: "__PREFIX__/notify"
                 payload: >-
-                  __AWTRIX_DRAW_HDR__{%- set sc = goal.scorer | default('?') -%}
-                  {%- set ass = goal.assists | default([]) -%}
-                  {%- set sit = goal.situation | default('') -%}
-                  {%- set per = goal.period | default('') -%}
-                  {%- set clk = goal.period_clock | default('') -%}
-                  {%- set gt = goal.team | default('') -%}
-                  {%- set hs = goal.home_score_after | default(0) | int -%}
-                  {%- set as_ = goal.away_score_after | default(0) | int -%}
-                  {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default(state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'last_home_team')) | default('') -%}
-                  {%- set goal_is_home = (gt == home_t) -%}
-                  {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
-                  {%- set _gslug = _ts(gt) -%}
-                  {%- set _gd = _ld[_gslug] if _gslug in _ld else _fl -%}
-                  {"draw":[{{ _gd }}],"text":[{"t":"     ","c":"000000"},{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}: ","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}: ","c":"FFD700"}{% endif %},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" ({{ ass | join(', ') }})","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"repeat":2,"stack":false}
+                  __AWTRIX_DRAW_HDR__{%- set _ht = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default(state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'last_home_team')) | default('') | string -%}
+                  {%- set _hslug = _ts(_ht) -%}
+                  {%- set _hd = _ld[_hslug] if _hslug in _ld else _fl -%}
+                  {%- set goal_iter = goals if status == 'finished_today' else (goals | reverse | list) -%}
+                  {%- set ns = namespace(parts=[]) -%}
+                  {%- for g in goal_iter -%}
+                  {%- set sc = g.scorer | default('?') -%}
+                  {%- set hs = g.home_score_after | default(0) | int -%}
+                  {%- set as_ = g.away_score_after | default(0) | int -%}
+                  {%- set per = g.period | default('') -%}
+                  {%- set clk = g.period_clock | default('') -%}
+                  {%- set sit = g.situation | default('') -%}
+                  {%- set sit_str = ' ' ~ sit if sit not in ['EQ','ES',''] else '' -%}
+                  {%- set ns.parts = ns.parts + [(hs | string) ~ '-' ~ (as_ | string) ~ ' ' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str] -%}
+                  {%- endfor -%}
+                  {"draw":[{{ _hd }}],"text":"     {{ ns.parts | join('   ') }}","duration":20,"stack":false}
 """
 
 
