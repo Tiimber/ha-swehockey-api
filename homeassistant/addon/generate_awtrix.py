@@ -487,7 +487,7 @@ _BUTTON_AUTOMATIONS = """\
     is_upcoming: "{{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}"
     goals: "{{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals') if slug != '' else [] }}"
     n: "{{ (goals or []) | length }}"
-    new_idx: "{{ 0 if (current_app.startswith('hockey_') and current_app != last_app) else ((cur_idx + 1) % ([n | int, 1] | max)) }}"
+    new_idx: "{{ 0 if (not last_app.startswith('hockey_') or last_app[7:] != slug) else ((cur_idx + 1) % ([n | int, 1] | max)) }}"
     goal: "{{ (goals or [])[-(new_idx | int + 1)] if (n | int) > 0 else none }}"
   condition:
     - "{{ is_hockey }}"
@@ -545,7 +545,7 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
                   {%- set _gslug = _ts(gt) -%}
                   {%- set _gd = _ld[_gslug] if _gslug in _ld else _fl -%}
-                  {"draw":[{{ _gd }}],"text":[{"t":"    ","c":"000000"},{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}: ","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}: ","c":"FFD700"}{% endif %},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" ({{ ass | join(', ') }})","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"repeat":2,"stack":false}
+                  {"draw":[{{ _gd }}],"text":[{"t":"     ","c":"000000"},{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}: ","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}: ","c":"FFD700"}{% endif %},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" ({{ ass | join(', ') }})","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"repeat":2,"stack":false}
 """
 
 
