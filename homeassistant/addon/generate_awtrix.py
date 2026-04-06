@@ -509,7 +509,7 @@ _BUTTON_AUTOMATIONS = """\
                   {%- else -%}
                   {%- set _date_str = '' -%}
                   {%- endif -%}
-                  {"text":"{{ _nht }} - {{ _nat }}{% if _date_str %}, {{ _date_str }}{% endif %} KL. {{ _nt }}","repeat":1,"stack":false}
+                  {"text":"{{ _nht }} - {{ _nat }}{% if _date_str %}, {{ _date_str }}{% endif %} {{ _nt }}","repeat":1,"stack":false}
       default:
         - service: input_text.set_value
           target:
