@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9999
+ARG CACHEBUST=20260406_10000
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -936,8 +936,26 @@ def _text_color_for(bg_hex: str) -> str:
     return "#000000" if _luminance(bg_hex) > 0.179 else "#ffffff"
 
 
-def _abbr_pixels(abbr: str, x_off: int, text_col: str) -> list[str]:
-    """Return dp draw commands for abbr overlaid on an 8×8 logo at x_off.
+def _pixel_bg_color(x, y, colors, x_offset):
+    """Return the logo color painted at pixel (x, y) for the given team."""
+    if not colors:
+        p, s, a = "#444444", "#888888", None
+    else:
+        p, s, a = colors
+    lx = x - x_offset  # local coordinate within 0-7
+    if a is None:
+        return p if lx <= (7 - y) else s
+    else:
+        if lx <= min(7, 5 - y):
+            return p
+        elif lx <= min(7, 7 - y):
+            return s
+        else:
+            return a or p
+
+
+def _abbr_pixels(abbr, x_off, colors):
+    """Return dp draw commands for abbr overlaid on an 8x8 logo at x_off.
 
     Layout:
       2 chars: top-left (x_off+0, y=0), bottom-right (x_off+5, y=3)
@@ -953,12 +971,14 @@ def _abbr_pixels(abbr: str, x_off: int, text_col: str) -> list[str]:
     else:  # 4
         positions = [(x_off + 0, 0), (x_off + 4, 0), (x_off + 0, 3), (x_off + 4, 3)]
 
-    parts: list[str] = []
+    parts = []
     for ch, (px, py) in zip(abbr, positions):
         rows = _FONT3X5.get(ch.upper(), _FONT3X5.get("X", [0]*5))
         for dy, row_bits in enumerate(rows):
             for dx in range(3):
                 if row_bits & (0b100 >> dx):
+                    bg = _pixel_bg_color(px + dx, py + dy, colors, x_off)
+                    text_col = _text_color_for(bg)
                     parts.append(f'{{"dp":[{px+dx},{py+dy},"{text_col}"]}}')
     return parts
 
@@ -1078,8 +1098,7 @@ def _draw_from_colors(colors, x_offset=0, slug=""):
     # Overlay abbreviation pixels if available
     abbr = _TEAM_ABBR.get(slug, "")
     if abbr:
-        text_col = _text_color_for(p)
-        parts.extend(_abbr_pixels(abbr, x_offset, text_col))
+        parts.extend(_abbr_pixels(abbr, x_offset, (p, s, a)))
 
     return ",".join(parts)
 

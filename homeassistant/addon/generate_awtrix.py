@@ -40,35 +40,35 @@ from pathlib import Path
 # Value = 2–4 char string, all uppercase.
 _TEAM_ABBR: dict[str, str] = {
     # SHL
-    "brynas_if":        "BIF",
-    "djurgardens_if":   "DIF",
-    "frolunda_hc":      "FHC",
-    "farjestad_bk":     "FBK",
-    "hv71":             "HV",
-    "leksands_if":      "LIF",
-    "linkoping_hc":     "LHC",
-    "lulea_hf":         "LHF",
-    "malmo_redhawks":   "MAL",
-    "rogle_bk":         "RBK",
-    "skelleftea_aik":   "SAIK",
-    "timra_ik":         "TIK",
-    "vaxjo_lakers":     "VLH",
-    "orebro_hk":        "ÖHK",
+    "brynas_if": "BIF",
+    "djurgardens_if": "DIF",
+    "frolunda_hc": "FHC",
+    "farjestad_bk": "FBK",
+    "hv71": "HV",
+    "leksands_if": "LIF",
+    "linkoping_hc": "LHC",
+    "lulea_hf": "LHF",
+    "malmo_redhawks": "MAL",
+    "rogle_bk": "RBK",
+    "skelleftea_aik": "SAIK",
+    "timra_ik": "TIK",
+    "vaxjo_lakers": "VLH",
+    "orebro_hk": "ÖHK",
     # HockeyAllsvenskan
-    "aik":              "AIK",
-    "almtuna_is":       "AIS",
-    "bik_karlskoga":    "BIK",
-    "if_bjorkloven":    "IFB",
-    "ik_oskarshamn":    "IKO",
-    "modo_hockey":      "MODO",
-    "mora_ik":          "MIK",
+    "aik": "AIK",
+    "almtuna_is": "AIS",
+    "bik_karlskoga": "BIK",
+    "if_bjorkloven": "IFB",
+    "ik_oskarshamn": "IKO",
+    "modo_hockey": "MODO",
+    "mora_ik": "MIK",
     "nybro_vikings_if": "NYB",
-    "troja_ljungby":    "TRO",
-    "sodertalje_sk":    "SSK",
-    "vik_vasteras_hk":  "VIK",
-    "kalmar_hc":        "KHC",
-    "ostersunds_ik":    "ÖIK",
-    "vimmerby_hockey":  "VHC",
+    "troja_ljungby": "TRO",
+    "sodertalje_sk": "SSK",
+    "vik_vasteras_hk": "VIK",
+    "kalmar_hc": "KHC",
+    "ostersunds_ik": "ÖIK",
+    "vimmerby_hockey": "VHC",
 }
 
 # ---------------------------------------------------------------------------
@@ -109,9 +109,11 @@ def _luminance(hex_color: str) -> float:
     """Relative luminance of a hex color string like '#rrggbb'."""
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
     def lin(c: float) -> float:
         c /= 255.0
         return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
     return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 
 
@@ -120,14 +122,33 @@ def _text_color_for(bg_hex: str) -> str:
     return "#000000" if _luminance(bg_hex) > 0.179 else "#ffffff"
 
 
-def _abbr_pixels(abbr: str, x_off: int, text_col: str) -> list[str]:
+def _pixel_bg_color(
+    x: int, y: int, colors: tuple | None, x_offset: int
+) -> str:
+    """Return the logo color painted at pixel (x, y) for the given team."""
+    if not colors:
+        p, s, a = "#444444", "#888888", None
+    else:
+        p, s, a = colors
+    lx = x - x_offset  # local coordinate within 0-7
+    if a is None:
+        return p if lx <= (7 - y) else s
+    else:
+        if lx <= min(7, 5 - y):
+            return p
+        elif lx <= min(7, 7 - y):
+            return s
+        else:
+            return a or p
+
+
+def _abbr_pixels(abbr: str, x_off: int, colors: tuple | None) -> list[str]:
     """Return dp draw commands for abbr overlaid on an 8×8 logo at x_off.
 
     Layout:
       2 chars: top-left (x_off+0, y=0), bottom-right (x_off+5, y=3)
       3 chars: top-left (x_off+0, y=0), top-right (x_off+5, y=0),
-               bottom-center (x_off+2, y=3)  — wait, 3-char: TL + BR-top + BR-bot
-               Actually: TL (0,0), TR (5,0), BC (1,3)
+               bottom-center (x_off+2, y=3)
       4 chars: TL (0,0), TR (4,0), BL (0,3), BR (4,3)
     """
     n = len(abbr)
@@ -140,11 +161,13 @@ def _abbr_pixels(abbr: str, x_off: int, text_col: str) -> list[str]:
 
     parts: list[str] = []
     for ch, (px, py) in zip(abbr, positions):
-        rows = _FONT3X5.get(ch.upper(), _FONT3X5.get("X", [0]*5))
+        rows = _FONT3X5.get(ch.upper(), _FONT3X5.get("X", [0] * 5))
         for dy, row_bits in enumerate(rows):
             for dx in range(3):
                 if row_bits & (0b100 >> dx):
-                    parts.append(f'{{"dp":[{px+dx},{py+dy},"{text_col}"]}}')
+                    bg = _pixel_bg_color(px + dx, py + dy, colors, x_off)
+                    text_col = _text_color_for(bg)
+                    parts.append(f'{{"dp":[{px + dx},{py + dy},"{text_col}"]}}')
     return parts
 
 
@@ -263,8 +286,7 @@ def _draw_from_colors(colors: tuple | None, x_offset: int = 0, slug: str = "") -
     # Overlay abbreviation pixels if available
     abbr = _TEAM_ABBR.get(slug, "")
     if abbr:
-        text_col = _text_color_for(p)
-        parts.extend(_abbr_pixels(abbr, x_offset, text_col))
+        parts.extend(_abbr_pixels(abbr, x_offset, (p, s, a)))
 
     return ",".join(parts)
 
