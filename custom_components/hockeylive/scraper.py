@@ -61,6 +61,8 @@ def _get(url: str) -> Optional[str]:
         try:
             resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
             resp.raise_for_status()
+            # swehockey.se returns text/html without charset; force UTF-8
+            resp.encoding = "utf-8"
             return resp.text
         except requests.RequestException as exc:
             logger.error("Request failed [%s]: %s", url, exc)
@@ -252,9 +254,22 @@ def _parse_game_events(html: str) -> dict:
             cells = row.find_all("td")
             if len(cells) < 2:
                 continue
-            cell_texts = [c.get_text(strip=True) for c in cells]
+            cell_texts = [
+                re.sub(r"\s+", " ", c.get_text(" ", strip=True).replace("\xa0", " ")).strip()
+                for c in cells
+            ]
+            # New format period headers: single-cell rows like "3rd period"
+            if len(cells) == 1:
+                h_upper = cell_texts[0].upper()
+                _HDR_MAP = {
+                    "1ST PERIOD": "P1", "2ND PERIOD": "P2", "3RD PERIOD": "P3",
+                    "OT": "OT", "OVERTIME": "OT", "SO": "SO", "SHOOTOUT": "SO",
+                }
+                if h_upper in _HDR_MAP:
+                    current_period_label = last_period = _HDR_MAP[h_upper]
+                continue
             time_cell = cell_texts[0]
-            if not re.fullmatch(r"\d{1,2}:\d{2}", time_cell):
+            if not re.fullmatch(r"\d{1,3}:\d{2}", time_cell):
                 continue
 
             last_time_str = time_cell
@@ -267,22 +282,110 @@ def _parse_game_events(html: str) -> dict:
             except ValueError:
                 pass
 
+            event_type = cell_texts[1] if len(cell_texts) > 1 else ""
+            team = cell_texts[2] if len(cell_texts) > 2 else ""
+            players_text = cell_texts[3] if len(cell_texts) > 3 else ""
+            extra_text = cell_texts[4] if len(cell_texts) > 4 else ""
             events.append({
                 "time":    time_cell,
                 "period":  current_period_label,
-                "type":    cell_texts[1] if len(cell_texts) > 1 else "",
-                "team":    cell_texts[2] if len(cell_texts) > 2 else "",
-                "players": cell_texts[3] if len(cell_texts) > 3 else "",
+                "type":    event_type,
+                "team":    team,
+                "players": players_text,
+                "extra":   extra_text,
             })
 
         if events:
             break
+
+    goals: list[dict] = []
+    penalties: list[dict] = []
+    _ACTIONS_GOAL_RE = re.compile(r"^(\d+)-(\d+)\s*\(([^)]+)\)\s*$")
+    _ACTIONS_PEN_RE = re.compile(r"^(\d+)\s*min\b", re.I)
+    _VALID_DURS = {2, 4, 5, 10, 20, 25}
+
+    for ev in events:
+        game_time = ev["time"]
+        period = ev["period"] or ""
+        event_type = ev["type"]
+        team = ev["team"]
+        players_text = ev["players"]
+        extra_text = ev["extra"]
+        try:
+            mm, ss = map(int, game_time.split(":"))
+            game_secs = mm * 60 + ss
+        except ValueError:
+            game_secs = 0
+        offset_secs = {"P1": 0, "P2": 1200, "P3": 2400, "OT": 3600, "SO": 3900}.get(period, 0)
+        period_clock_secs = max(0, game_secs - offset_secs)
+        period_clock = f"{period_clock_secs // 60:02d}:{period_clock_secs % 60:02d}"
+
+        gm = _ACTIONS_GOAL_RE.match(event_type)
+        if gm:
+            home_after, away_after = int(gm.group(1)), int(gm.group(2))
+            situation = gm.group(3).strip()
+            # Parse players: "34. Brodin, Daniel (1) 32. Olofsson, Jacob"
+            cleaned = re.sub(r"\(\d+\)", "", players_text)  # remove goal count
+            parts = [p.strip() for p in re.split(r"\b\d+\.\s*", cleaned) if p.strip()]
+            def _fmt(name: str) -> str:
+                if "," in name:
+                    last, first = name.split(",", 1)
+                    return f"{first.strip()} {last.strip()}"
+                return name
+            scorer = _fmt(parts[0]) if parts else players_text
+            assists = [_fmt(p) for p in parts[1:]]
+            goals.append({
+                "game_time": game_time,
+                "game_time_secs": game_secs,
+                "period": period,
+                "period_clock": period_clock,
+                "team": team,
+                "scorer": scorer,
+                "assists": assists,
+                "situation": situation,
+                "home_score_after": home_after,
+                "away_score_after": away_after,
+                "secs_since": 0,
+            })
+        else:
+            pm = _ACTIONS_PEN_RE.match(event_type)
+            if pm:
+                dur = int(pm.group(1))
+                if dur not in _VALID_DURS:
+                    dur = None
+                pen_parts = [p.strip() for p in re.split(r"\b\d+\.\s*", players_text) if p.strip()]
+                player_raw = pen_parts[0] if pen_parts else players_text
+                player_raw = player_raw.rstrip(",")
+                if "," in player_raw:
+                    last, first = player_raw.split(",", 1)
+                    player = f"{first.strip()} {last.strip()}"
+                else:
+                    player = player_raw
+                offense = re.sub(r"\s*\(\d+:\d+\s*-\s*\d+:\d+\)\s*$", "", extra_text).strip()
+                penalties.append({
+                    "game_time": game_time,
+                    "game_time_secs": game_secs,
+                    "period": period,
+                    "period_clock": period_clock,
+                    "team": team,
+                    "player": player,
+                    "duration_min": dur,
+                    "offense": offense,
+                    "is_active": False,
+                })
+
+    # Events come newest-first; reverse goals to chronological order
+    goals_chrono = list(reversed(goals))
 
     if events:
         result["events"] = events
         result["period"] = last_period
         result["is_overtime"] = last_period == "OT"
         result["is_shootout"] = last_period == "SO"
+        result["goals"] = goals_chrono
+        result["last_goal"] = goals_chrono[-1] if goals_chrono else None
+        result["penalties"] = penalties
+        result["active_penalties"] = []
         if last_time_str and last_period:
             try:
                 mins, secs = map(int, last_time_str.split(":"))

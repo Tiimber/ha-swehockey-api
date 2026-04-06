@@ -55,6 +55,9 @@ def _get(url: str) -> Optional[str]:
         resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
         _last_request = time.monotonic()
         resp.raise_for_status()
+        # swehockey.se returns text/html without a charset declaration; requests
+        # then defaults to ISO-8859-1 per HTTP spec, but the page is UTF-8.
+        resp.encoding = "utf-8"
         return resp.text
     except requests.RequestException as exc:
         _last_request = time.monotonic()
@@ -367,6 +370,12 @@ _GOAL_RE = re.compile(r"\bm[åa]l\b|goal", re.I)
 _PENALTY_RE = re.compile(r"utvisning|penalty|\bstraff\b(?!skott)", re.I)
 _MISCONDUCT_RE = re.compile(r"matchstraff|game\s*misconduct", re.I)
 
+# New "Actions" table format (current swehockey.se):
+#   goals appear as "HOME-AWAY (SITUATION)" e.g. "0-2 (EQ)"
+#   penalties appear as "N min" e.g. "2 min"
+_ACTIONS_GOAL_RE = re.compile(r"^\d+-\d+\s*\(([^)]+)\)\s*$")
+_ACTIONS_PENALTY_RE = re.compile(r"^(\d+)\s*min\b", re.I)
+
 # Valid Swedish/English period header tokens
 _PERIOD_HEADERS: dict[str, str] = {
     # Numeric (Swedish site older format)
@@ -460,6 +469,36 @@ def _parse_goal_players(cell: str) -> tuple[str, list[str]]:
     return scorer, assists
 
 
+def _parse_actions_goal_players(cell: str) -> tuple[str, list[str]]:
+    """
+    Parse the player cell from the new "Actions" table format.
+
+    Example cell text (after whitespace normalisation):
+      "34. Brodin, Daniel (1) 32. Olofsson, Jacob 28. Maione, Mathew"
+
+    The first player block is the scorer; the rest are assists.
+    "(N)" is the goal count for the scorer and is stripped.
+    Names are stored as "Firstname Lastname" (the site sends "Lastname, Firstname").
+    """
+    # Remove goal-count marker "(1)", "(2)", etc.
+    cell = re.sub(r"\(\d+\)", "", cell)
+    # Split on jersey-number prefixes like "34." — keep the content after each
+    parts = re.split(r"\b\d+\.\s*", cell)
+    players: list[str] = []
+    for p in parts:
+        text = re.sub(r"\s+", " ", p).strip().rstrip(",")
+        if not text:
+            continue
+        # "Lastname, Firstname" → "Firstname Lastname"
+        if "," in text:
+            last, first = text.split(",", 1)
+            text = f"{first.strip()} {last.strip()}"
+        players.append(text)
+    if not players:
+        return "", []
+    return players[0], players[1:]
+
+
 def _parse_penalty_player(cells: list[str]) -> tuple[str, Optional[int], str]:
     """
     From a list of penalty row cells return (player, duration_min, offense).
@@ -541,13 +580,37 @@ def _classify_events(
         all_texts = [event_type, team, players] + extra
         secs_since = max(0, current_game_secs - game_secs)
 
-        if _GOAL_RE.search(event_type):
-            scorer, assists = _parse_goal_players(players)
-            situation = _parse_situation(all_texts)
-            if team.lower() == home_team.lower() and home_team:
-                home_score += 1
-            elif team.lower() == away_team.lower() and away_team:
-                away_score += 1
+        # ── Goal detection ─────────────────────────────────────────────────
+        # Old format: event_type contains "Mål" / "Goal"
+        # New "Actions" format: event_type is "HOME-AWAY (SITUATION)" e.g. "0-2 (EQ)"
+        actions_goal_m = _ACTIONS_GOAL_RE.match(event_type)
+        if _GOAL_RE.search(event_type) or actions_goal_m:
+            if actions_goal_m:
+                # Extract scorer/assists from the new multi-player cell format
+                scorer, assists = _parse_actions_goal_players(players)
+                situation = actions_goal_m.group(1).strip()
+                # Score is encoded directly in event_type: "HOME-AWAY (SIT)"
+                score_m = re.match(r"(\d+)-(\d+)", event_type)
+                if score_m:
+                    home_score_after = int(score_m.group(1))
+                    away_score_after = int(score_m.group(2))
+                else:
+                    # Fallback: count incrementally
+                    if team.lower() == home_team.lower() and home_team:
+                        home_score += 1
+                    elif team.lower() == away_team.lower() and away_team:
+                        away_score += 1
+                    home_score_after, away_score_after = home_score, away_score
+                home_score = home_score_after
+                away_score = away_score_after
+            else:
+                scorer, assists = _parse_goal_players(players)
+                situation = _parse_situation(all_texts)
+                if team.lower() == home_team.lower() and home_team:
+                    home_score += 1
+                elif team.lower() == away_team.lower() and away_team:
+                    away_score += 1
+                home_score_after, away_score_after = home_score, away_score
             goals.append(
                 {
                     "game_time": ev["game_time"],
@@ -558,14 +621,39 @@ def _classify_events(
                     "scorer": scorer,
                     "assists": assists,
                     "situation": situation,
-                    "home_score_after": home_score,
-                    "away_score_after": away_score,
+                    "home_score_after": home_score_after,
+                    "away_score_after": away_score_after,
                     "secs_since": secs_since,
                 }
             )
 
-        elif _PENALTY_RE.search(event_type) or _MISCONDUCT_RE.search(event_type):
-            player, duration, offense = _parse_penalty_player([players] + extra)
+        # ── Penalty detection ──────────────────────────────────────────────
+        # Old format: event_type contains "Utvisning" / "Penalty"
+        # New format: event_type is "N min" e.g. "2 min"
+        elif (
+            _PENALTY_RE.search(event_type)
+            or _MISCONDUCT_RE.search(event_type)
+            or _ACTIONS_PENALTY_RE.match(event_type)
+        ):
+            actions_pen_m = _ACTIONS_PENALTY_RE.match(event_type)
+            if actions_pen_m:
+                # New format: duration is in event_type, player in cell[3], offense in cell[4]
+                duration = int(actions_pen_m.group(1))
+                if duration not in _VALID_DURATIONS:
+                    duration = None
+                # players cell: "47. Björk, Marcus" → "Marcus Björk"
+                player_parts = re.split(r"\b\d+\.\s*", players)
+                player_raw = next((p.strip() for p in player_parts if p.strip()), players)
+                if "," in player_raw:
+                    last, first = player_raw.split(",", 1)
+                    player = f"{first.strip()} {last.strip()}"
+                else:
+                    player = player_raw
+                offense = extra[0] if extra else ""
+                # Offense cell often contains "Holding (13:24 - 15:24)" — keep just the offense name
+                offense = re.sub(r"\s*\(\d+:\d+\s*-\s*\d+:\d+\)\s*$", "", offense).strip()
+            else:
+                player, duration, offense = _parse_penalty_player([players] + extra)
             if duration is not None:
                 penalty_end = game_secs + duration * 60
                 elapsed = max(0, current_game_secs - game_secs)
@@ -738,6 +826,9 @@ def _parse_game_events(html: str) -> dict:
         {k: v for k, v in ev.items() if k != "_extra"} for ev in raw_events
     ]
 
+    # Events table shows newest-first; reverse goals so they're chronological
+    goals_chrono = list(reversed(goals))
+
     return {
         "home_team": home_team,
         "away_team": away_team,
@@ -748,8 +839,8 @@ def _parse_game_events(html: str) -> dict:
         "period_scores": [],
         "is_overtime": current_period == "OT",
         "is_shootout": current_period == "SO",
-        "goals": goals,
-        "last_goal": goals[-1] if goals else None,
+        "goals": goals_chrono,
+        "last_goal": goals_chrono[-1] if goals_chrono else None,
         "penalties": penalties,
         "active_penalties": [p for p in penalties if p["is_active"]],
         "events": public_events,
