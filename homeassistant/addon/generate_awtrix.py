@@ -229,11 +229,7 @@ _T = """\
       event: start
   condition:
     - condition: template
-      value_template: >
-        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
-        {{ states('sensor.hockeylive___SLUG___status') in ['upcoming','idle']
-           and ndt is not none
-           and (as_timestamp(ndt) - now().timestamp()) >= 86400 }}
+      value_template: "{{ states('sensor.hockeylive___SLUG___status') in ['upcoming_far', 'idle'] }}"
   action:
     - service: mqtt.publish
       data:
@@ -255,13 +251,7 @@ _T = """\
       event: start
   condition:
     - condition: template
-      value_template: >
-        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
-        {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
-           and ndt is not none
-           and (as_timestamp(ndt) - now().timestamp()) < 86400
-           and (as_timestamp(ndt) - now().timestamp()) > 7200
-           and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
+      value_template: "{{ states('sensor.hockeylive___SLUG___status') == 'upcoming_countdown' and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}"
   action:
     - service: mqtt.publish
       data:
@@ -285,12 +275,7 @@ _T = """\
       event: start
   condition:
     - condition: template
-      value_template: >
-        {%- set ndt = state_attr('sensor.hockeylive___SLUG___status','next_datetime') -%}
-        {{ states('sensor.hockeylive___SLUG___status') == 'upcoming'
-           and ndt is not none
-           and (as_timestamp(ndt) - now().timestamp()) <= 7200
-           and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}
+      value_template: "{{ states('sensor.hockeylive___SLUG___status') == 'upcoming_prematch' and states('binary_sensor.hockeylive___SLUG___live') == 'off' }}"
   action:
     - service: mqtt.publish
       data:
