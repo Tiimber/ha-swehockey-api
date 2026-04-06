@@ -116,6 +116,17 @@ async def _refresh_season(season_id: int) -> None:
     """Fetch a single season page and update the cache entry."""
     loop = asyncio.get_event_loop()
     info = await loop.run_in_executor(None, scraper.fetch_season_info, season_id)
+    if not info["games"]:
+        existing = _schedule_cache.get(season_id)
+        if existing and existing.get("games"):
+            # Fetch returned no games — likely a transient network/parse error.
+            # Keep the stale cache so that finished_today status is not lost.
+            logger.warning(
+                "Season %d: empty response, keeping stale cache (%d games)",
+                season_id,
+                len(existing["games"]),
+            )
+            return
     _schedule_cache[season_id] = {
         "games": info["games"],
         "fetched_at": datetime.now(STOCKHOLM_TZ),

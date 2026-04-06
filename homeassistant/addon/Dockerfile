@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_10001
+ARG CACHEBUST=20260406_10002
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -979,7 +979,7 @@ def _abbr_pixels(abbr, x_off, colors):
                 if row_bits & (0b100 >> dx):
                     bg = _pixel_bg_color(px + dx, py + dy, colors, x_off)
                     text_col = _text_color_for(bg)
-                    parts.append(f'{{"df":[{px+dx},{py+dy},1,1,"{text_col}"]}}')
+                    parts.append(f'{{"dp":[{px+dx},{py+dy},"{text_col}"]}}')
     return parts
 
 
@@ -1079,12 +1079,8 @@ def _draw_from_colors(colors, x_offset=0, slug=""):
     def seg(x0, y, x1, color):
         x0 += x_offset
         x1 += x_offset
-        if x0 > x1:
-            return
-        if x0 == x1:
-            parts.append(f'{{"dp":[{x0},{y},"{color}"]}}')
-        else:
-            parts.append(f'{{"dl":[{x0},{y},{x1},{y},"{color}"]}}')
+        for x in range(x0, x1 + 1):
+            parts.append(f'{{"dp":[{x},{y},"{color}"]}}')
 
     for r in range(8):
         if a is None:
