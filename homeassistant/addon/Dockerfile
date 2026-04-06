@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9500
+ARG CACHEBUST=20260406_9600
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1259,7 +1259,7 @@ _BUTTON_AUTOMATIONS = """\
   trigger:
     - platform: mqtt
       topic: "__PREFIX__/stats/buttonSelect"
-      payload: "1"
+      payload: "0"
   variables:
     current_app: "{{ states('sensor.awtrix_current_app') }}"
     slug: "{{ current_app[7:] if current_app.startswith('hockey_') else '' }}"

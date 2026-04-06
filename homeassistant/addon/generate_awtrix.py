@@ -476,7 +476,7 @@ _BUTTON_AUTOMATIONS = """\
   trigger:
     - platform: mqtt
       topic: "__PREFIX__/stats/buttonSelect"
-      payload: "1"
+      payload: "0"
   variables:
     current_app: "{{ states('sensor.awtrix_current_app') }}"
     slug: "{{ current_app[7:] if current_app.startswith('hockey_') else '' }}"
