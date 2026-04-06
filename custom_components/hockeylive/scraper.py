@@ -39,7 +39,7 @@ BASE_URL = "https://stats.swehockey.se"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; HockeyLiveHA/1.0; personal-use)"}
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 REQUEST_TIMEOUT = 15
-REQUEST_DELAY = 1.5   # minimum seconds between outgoing requests
+REQUEST_DELAY = 1.5  # minimum seconds between outgoing requests
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ _last_request: float = 0.0
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
+
 
 def _get(url: str) -> Optional[str]:
     global _last_request
@@ -75,6 +76,7 @@ def _get(url: str) -> Optional[str]:
 # Schedule
 # ---------------------------------------------------------------------------
 
+
 def fetch_schedule(season_id: int) -> list[dict]:
     """Return all games for *season_id* as a list of game dicts."""
     url = f"{BASE_URL}/ScheduleAndResults/Schedule/{season_id}"
@@ -83,7 +85,9 @@ def fetch_schedule(season_id: int) -> list[dict]:
 
 
 def _cell_text(td) -> str:
-    return re.sub(r"\s+", " ", td.get_text(" ", strip=True).replace("\xa0", " ")).strip()
+    return re.sub(
+        r"\s+", " ", td.get_text(" ", strip=True).replace("\xa0", " ")
+    ).strip()
 
 
 _ROUND_RE = re.compile(
@@ -114,7 +118,12 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
                 current_date = date_str
             elif current_date and re.fullmatch(r"\d{2}:\d{2}", texts[2]):
                 date_str, time_str = current_date, texts[2]
-            game_text, score_text, period_text, venue_text = texts[3], texts[4], texts[5], texts[7]
+            game_text, score_text, period_text, venue_text = (
+                texts[3],
+                texts[4],
+                texts[5],
+                texts[7],
+            )
             score_cell_idx = 4
 
         elif n == 7:
@@ -127,7 +136,12 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
                 tm = re.search(r"(\d{2}:\d{2})$", dt_raw)
                 if tm:
                     date_str, time_str = current_date, tm.group(1)
-            game_text, score_text, period_text, venue_text = texts[2], texts[3], texts[4], texts[6]
+            game_text, score_text, period_text, venue_text = (
+                texts[2],
+                texts[3],
+                texts[4],
+                texts[6],
+            )
             score_cell_idx = 3
 
         if not date_str or not game_text or " - " not in game_text:
@@ -172,21 +186,23 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
         except ValueError:
             pass
 
-        games.append({
-            "season_id":     season_id,
-            "game_id":       game_id,
-            "date":          date_str,
-            "time":          time_str,
-            "datetime":      game_dt,
-            "home_team":     home_team,
-            "away_team":     away_team,
-            "round":         round_name,
-            "home_score":    home_score,
-            "away_score":    away_score,
-            "period_scores": period_scores,
-            "venue":         venue,
-            "is_completed":  home_score is not None and period_scores is not None,
-        })
+        games.append(
+            {
+                "season_id": season_id,
+                "game_id": game_id,
+                "date": date_str,
+                "time": time_str,
+                "datetime": game_dt,
+                "home_team": home_team,
+                "away_team": away_team,
+                "round": round_name,
+                "home_score": home_score,
+                "away_score": away_score,
+                "period_scores": period_scores,
+                "venue": venue,
+                "is_completed": home_score is not None and period_scores is not None,
+            }
+        )
 
     return games
 
@@ -196,10 +212,10 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 _PERIOD_FROM_MINUTES = [
-    (0,  20,   "P1"),
-    (20, 40,   "P2"),
-    (40, 60,   "P3"),
-    (60, 65,   "OT"),
+    (0, 20, "P1"),
+    (20, 40, "P2"),
+    (40, 60, "P3"),
+    (60, 65, "OT"),
     (65, 9999, "SO"),
 ]
 
@@ -220,9 +236,12 @@ def fetch_game_events(game_id: int) -> dict:
 def _parse_game_events(html: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
     result: dict = {
-        "home_score": 0, "away_score": 0,
-        "period": None, "period_clock": None,
-        "is_overtime": False, "is_shootout": False,
+        "home_score": 0,
+        "away_score": 0,
+        "period": None,
+        "period_clock": None,
+        "is_overtime": False,
+        "is_shootout": False,
         "events": [],
     }
 
@@ -255,15 +274,22 @@ def _parse_game_events(html: str) -> dict:
             if len(cells) < 2:
                 continue
             cell_texts = [
-                re.sub(r"\s+", " ", c.get_text(" ", strip=True).replace("\xa0", " ")).strip()
+                re.sub(
+                    r"\s+", " ", c.get_text(" ", strip=True).replace("\xa0", " ")
+                ).strip()
                 for c in cells
             ]
             # New format period headers: single-cell rows like "3rd period"
             if len(cells) == 1:
                 h_upper = cell_texts[0].upper()
                 _HDR_MAP = {
-                    "1ST PERIOD": "P1", "2ND PERIOD": "P2", "3RD PERIOD": "P3",
-                    "OT": "OT", "OVERTIME": "OT", "SO": "SO", "SHOOTOUT": "SO",
+                    "1ST PERIOD": "P1",
+                    "2ND PERIOD": "P2",
+                    "3RD PERIOD": "P3",
+                    "OT": "OT",
+                    "OVERTIME": "OT",
+                    "SO": "SO",
+                    "SHOOTOUT": "SO",
                 }
                 if h_upper in _HDR_MAP:
                     current_period_label = last_period = _HDR_MAP[h_upper]
@@ -286,14 +312,16 @@ def _parse_game_events(html: str) -> dict:
             team = cell_texts[2] if len(cell_texts) > 2 else ""
             players_text = cell_texts[3] if len(cell_texts) > 3 else ""
             extra_text = cell_texts[4] if len(cell_texts) > 4 else ""
-            events.append({
-                "time":    time_cell,
-                "period":  current_period_label,
-                "type":    event_type,
-                "team":    team,
-                "players": players_text,
-                "extra":   extra_text,
-            })
+            events.append(
+                {
+                    "time": time_cell,
+                    "period": current_period_label,
+                    "type": event_type,
+                    "team": team,
+                    "players": players_text,
+                    "extra": extra_text,
+                }
+            )
 
         if events:
             break
@@ -316,7 +344,9 @@ def _parse_game_events(html: str) -> dict:
             game_secs = mm * 60 + ss
         except ValueError:
             game_secs = 0
-        offset_secs = {"P1": 0, "P2": 1200, "P3": 2400, "OT": 3600, "SO": 3900}.get(period, 0)
+        offset_secs = {"P1": 0, "P2": 1200, "P3": 2400, "OT": 3600, "SO": 3900}.get(
+            period, 0
+        )
         period_clock_secs = max(0, game_secs - offset_secs)
         period_clock = f"{period_clock_secs // 60:02d}:{period_clock_secs % 60:02d}"
 
@@ -327,33 +357,41 @@ def _parse_game_events(html: str) -> dict:
             # Parse players: "34. Brodin, Daniel (1) 32. Olofsson, Jacob"
             cleaned = re.sub(r"\(\d+\)", "", players_text)  # remove goal count
             parts = [p.strip() for p in re.split(r"\b\d+\.\s*", cleaned) if p.strip()]
+
             def _fmt(name: str) -> str:
                 if "," in name:
                     last, first = name.split(",", 1)
                     return f"{first.strip()} {last.strip()}"
                 return name
+
             scorer = _fmt(parts[0]) if parts else players_text
             assists = [_fmt(p) for p in parts[1:]]
-            goals.append({
-                "game_time": game_time,
-                "game_time_secs": game_secs,
-                "period": period,
-                "period_clock": period_clock,
-                "team": team,
-                "scorer": scorer,
-                "assists": assists,
-                "situation": situation,
-                "home_score_after": home_after,
-                "away_score_after": away_after,
-                "secs_since": 0,
-            })
+            goals.append(
+                {
+                    "game_time": game_time,
+                    "game_time_secs": game_secs,
+                    "period": period,
+                    "period_clock": period_clock,
+                    "team": team,
+                    "scorer": scorer,
+                    "assists": assists,
+                    "situation": situation,
+                    "home_score_after": home_after,
+                    "away_score_after": away_after,
+                    "secs_since": 0,
+                }
+            )
         else:
             pm = _ACTIONS_PEN_RE.match(event_type)
             if pm:
                 dur = int(pm.group(1))
                 if dur not in _VALID_DURS:
                     dur = None
-                pen_parts = [p.strip() for p in re.split(r"\b\d+\.\s*", players_text) if p.strip()]
+                pen_parts = [
+                    p.strip()
+                    for p in re.split(r"\b\d+\.\s*", players_text)
+                    if p.strip()
+                ]
                 player_raw = pen_parts[0] if pen_parts else players_text
                 player_raw = player_raw.rstrip(",")
                 if "," in player_raw:
@@ -361,18 +399,22 @@ def _parse_game_events(html: str) -> dict:
                     player = f"{first.strip()} {last.strip()}"
                 else:
                     player = player_raw
-                offense = re.sub(r"\s*\(\d+:\d+\s*-\s*\d+:\d+\)\s*$", "", extra_text).strip()
-                penalties.append({
-                    "game_time": game_time,
-                    "game_time_secs": game_secs,
-                    "period": period,
-                    "period_clock": period_clock,
-                    "team": team,
-                    "player": player,
-                    "duration_min": dur,
-                    "offense": offense,
-                    "is_active": False,
-                })
+                offense = re.sub(
+                    r"\s*\(\d+:\d+\s*-\s*\d+:\d+\)\s*$", "", extra_text
+                ).strip()
+                penalties.append(
+                    {
+                        "game_time": game_time,
+                        "game_time_secs": game_secs,
+                        "period": period,
+                        "period_clock": period_clock,
+                        "team": team,
+                        "player": player,
+                        "duration_min": dur,
+                        "offense": offense,
+                        "is_active": False,
+                    }
+                )
 
     # Events come newest-first; reverse goals to chronological order
     goals_chrono = list(reversed(goals))
@@ -389,8 +431,12 @@ def _parse_game_events(html: str) -> dict:
         if last_time_str and last_period:
             try:
                 mins, secs = map(int, last_time_str.split(":"))
-                offset = {"P1": 0, "P2": 20, "P3": 40, "OT": 60, "SO": 65}.get(last_period, 0)
-                result["period_clock"] = f"{int(mins + secs/60 - offset):02d}:{secs:02d}"
+                offset = {"P1": 0, "P2": 20, "P3": 40, "OT": 60, "SO": 65}.get(
+                    last_period, 0
+                )
+                result["period_clock"] = (
+                    f"{int(mins + secs / 60 - offset):02d}:{secs:02d}"
+                )
             except ValueError:
                 result["period_clock"] = last_time_str
 
@@ -400,6 +446,7 @@ def _parse_game_events(html: str) -> dict:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def list_teams_in_season(season_id: int) -> list[str]:
     games = fetch_schedule(season_id)
@@ -415,15 +462,16 @@ def list_teams_in_season(season_id: int) -> list[str]:
 def filter_team_games(games: list[dict], team_name: str) -> list[dict]:
     tl = team_name.lower()
     return [
-        g for g in games
-        if (g["home_team"] or "").lower() == tl
-        or (g["away_team"] or "").lower() == tl
+        g
+        for g in games
+        if (g["home_team"] or "").lower() == tl or (g["away_team"] or "").lower() == tl
     ]
 
 
 # ---------------------------------------------------------------------------
 # New season discovery
 # ---------------------------------------------------------------------------
+
 
 def discover_new_seasons(known_ids: list[int]) -> list[int]:
     """

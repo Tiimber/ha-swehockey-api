@@ -643,7 +643,9 @@ def _classify_events(
                     duration = None
                 # players cell: "47. Björk, Marcus" → "Marcus Björk"
                 player_parts = re.split(r"\b\d+\.\s*", players)
-                player_raw = next((p.strip() for p in player_parts if p.strip()), players)
+                player_raw = next(
+                    (p.strip() for p in player_parts if p.strip()), players
+                )
                 if "," in player_raw:
                     last, first = player_raw.split(",", 1)
                     player = f"{first.strip()} {last.strip()}"
@@ -651,7 +653,9 @@ def _classify_events(
                     player = player_raw
                 offense = extra[0] if extra else ""
                 # Offense cell often contains "Holding (13:24 - 15:24)" — keep just the offense name
-                offense = re.sub(r"\s*\(\d+:\d+\s*-\s*\d+:\d+\)\s*$", "", offense).strip()
+                offense = re.sub(
+                    r"\s*\(\d+:\d+\s*-\s*\d+:\d+\)\s*$", "", offense
+                ).strip()
             else:
                 player, duration, offense = _parse_penalty_player([players] + extra)
             if duration is not None:
