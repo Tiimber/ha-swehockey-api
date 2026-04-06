@@ -481,22 +481,13 @@ _BUTTON_AUTOMATIONS = """\
     current_app: "{{ states('sensor.awtrix_current_app') }}"
     last_app: "{{ states('input_text.awtrix_goal_app') }}"
     cur_idx: "{{ states('input_number.awtrix_goal_idx') | int(0) }}"
-    # currentApp can change while a notification is showing (AWTRIX continues
-    # app rotation in background). Prefer last_app when it's a hockey app so
-    # the user can keep cycling goals even after the display moved on.
-    slug: >
-      {{ last_app[7:] if last_app.startswith('hockey_')
-         else (current_app[7:] if current_app.startswith('hockey_') else '') }}
+    slug: "{{ (last_app[7:] if last_app.startswith('hockey_') else (current_app[7:] if current_app.startswith('hockey_') else '')) | trim }}"
     is_hockey: "{{ slug != '' }}"
     status: "{{ states('sensor.hockeylive_' ~ slug ~ '_status') if slug != '' else '' }}"
     is_upcoming: "{{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}"
-    goals: >
-      {{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals')
-         if slug != '' else [] }}
+    goals: "{{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals') if slug != '' else [] }}"
     n: "{{ (goals or []) | length }}"
-    new_idx: >
-      {{ 0 if last_app != ('hockey_' ~ slug)
-         else ((cur_idx + 1) % ([n | int, 1] | max)) }}
+    new_idx: "{{ 0 if last_app != current_app else ((cur_idx + 1) % ([n | int, 1] | max)) }}"
     goal: "{{ (goals or [])[-(new_idx | int + 1)] if (n | int) > 0 else none }}"
   condition:
     - "{{ is_hockey }}"
