@@ -524,14 +524,21 @@ _BUTTON_AUTOMATIONS = """\
           data:
             topic: "__PREFIX__/notify"
             payload: >-
-              {%- set sc = goal.scorer | default('?') -%}
+              __AWTRIX_DRAW_HDR__{%- set sc = goal.scorer | default('?') -%}
               {%- set ass = goal.assists | default([]) -%}
               {%- set sit = goal.situation | default('') -%}
               {%- set per = goal.period | default('') -%}
               {%- set clk = goal.period_clock | default('') -%}
+              {%- set gt = goal.team | default('') -%}
+              {%- set hs = goal.home_score_after | default(0) | int -%}
+              {%- set as_ = goal.away_score_after | default(0) | int -%}
+              {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default('') -%}
+              {%- set goal_is_home = (gt == home_t) -%}
               {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
               {%- set gn = (n | int) - (new_idx | int) -%}
-              {"text":[{"t":"M\u00e5l {{ gn }}/{{ n }} ","c":"888888"},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" Ass: {{ ass | join(', ') }}","c":"888888"}{% endif %},{"t":" {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"duration":15,"stack":false}
+              {%- set _gslug = _ts(gt) -%}
+              {%- set _gd = _ld[_gslug] if _gslug in _ld else _fl -%}
+              {"draw":[{{ _gd }}],"text":[{"t":"M\u00e5l {{ gn }}/{{ n }} ","c":"888888"},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" Ass: {{ ass | join(', ') }}","c":"888888"}{% endif %},{"t":" ","c":"FFFFFF"},{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}","c":"FFD700"}{% endif %},{"t":" {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"duration":15,"stack":false}
 """
 
 
@@ -624,7 +631,7 @@ def main() -> None:
         )
 
     # Append global button automations (once per prefix, not per watch)
-    automation_blocks.append(_sub(_BUTTON_AUTOMATIONS, PREFIX=prefix))
+    automation_blocks.append(_sub(_BUTTON_AUTOMATIONS, PREFIX=prefix, AWTRIX_DRAW_HDR=awtrix_draw_hdr))
 
     # Write as HA Package (works alongside any existing automation: !include setup)
     preamble = "\n".join(
