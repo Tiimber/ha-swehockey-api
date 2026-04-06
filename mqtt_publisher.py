@@ -622,13 +622,15 @@ class MQTTPublisher:
         """
         if not self._connected or not self._client:
             return
-        cfg = json.dumps({
-            "name": "AWTRIX Current App",
-            "unique_id": "awtrix_current_app",
-            "state_topic": f"{awtrix_prefix}/stats/currentApp",
-            "icon": "mdi:view-carousel",
-            "entity_category": "diagnostic",
-        })
+        cfg = json.dumps(
+            {
+                "name": "AWTRIX Current App",
+                "unique_id": "awtrix_current_app",
+                "state_topic": f"{awtrix_prefix}/stats/currentApp",
+                "icon": "mdi:view-carousel",
+                "entity_category": "diagnostic",
+            }
+        )
         topic = _discovery_topic("sensor", "awtrix_current_app")
         self._pub(topic, cfg)
         logger.info("MQTT global discovery: awtrix_current_app sensor published")

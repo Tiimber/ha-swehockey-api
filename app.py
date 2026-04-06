@@ -270,6 +270,7 @@ async def lifespan(app: FastAPI):
         try:
             import json as _json
             from pathlib import Path as _Path
+
             _opts = _json.loads(_Path("/data/options.json").read_text(encoding="utf-8"))
             _awtrix_prefix = (_opts.get("awtrix_prefix") or "").strip()
             if _awtrix_prefix:
