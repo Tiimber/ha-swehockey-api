@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9910
+ARG CACHEBUST=20260406_9920
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1288,7 +1288,9 @@ _BUTTON_AUTOMATIONS = """\
       payload: "0"
   variables:
     current_app: "{{ states('sensor.awtrix_current_app') }}"
-    slug: "{{ current_app[7:] if current_app.startswith('hockey_') else '' }}"
+    slug: >
+      {{ last_app[7:] if last_app.startswith('hockey_')
+         else (current_app[7:] if current_app.startswith('hockey_') else '') }}
     is_hockey: "{{ slug != '' }}"
     status: "{{ states('sensor.hockeylive_' ~ slug ~ '_status') if slug != '' else '' }}"
     is_upcoming: "{{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}"
@@ -1299,7 +1301,7 @@ _BUTTON_AUTOMATIONS = """\
     last_app: "{{ states('input_text.awtrix_goal_app') }}"
     cur_idx: "{{ states('input_number.awtrix_goal_idx') | int(0) }}"
     new_idx: >
-      {{ 0 if last_app != current_app
+      {{ 0 if last_app != ('hockey_' ~ slug)
          else ((cur_idx + 1) % ([n | int, 1] | max)) }}
     goal: "{{ (goals or [])[-(new_idx | int + 1)] if (n | int) > 0 else none }}"
   condition:
@@ -1358,7 +1360,7 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
                   {%- set _gslug = _ts(gt) -%}
                   {%- set _gd = _ld[_gslug] if _gslug in _ld else _fl -%}
-                  {"draw":[{{ _gd }}],"text":[{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}: ","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}: ","c":"FFD700"}{% endif %},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" - Ass: {{ ass | join(', ') }}","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"duration":15,"stack":false}
+                  {"draw":[{{ _gd }}],"text":[{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" ({{ ass | join(', ') }})","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %},{"t":" - ","c":"555555"},{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}","c":"FFD700"}{% endif %}],"repeat":2,"stack":false}
 """
 
 
