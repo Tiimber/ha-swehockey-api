@@ -596,15 +596,18 @@ class MQTTPublisher:
             self._goals_cache[watch_id] = state["goals"]
             _save_goals_cache(self._goals_cache)
         if state.get("status") == "finished_today":
+            # Prefer fresh goals from app.py (always chronological from fetch_game_events).
+            # This also overwrites any stale cache that may have been saved in wrong order.
+            fresh = status_payload.get("last_match", {}).get("goals", [])
             cached = self._goals_cache.get(watch_id, [])
-            if not cached:
-                # Fallback: app.py fetched goals from Game/Events for finished match
-                cached = status_payload.get("last_match", {}).get("goals", [])
-                if cached:
-                    self._goals_cache[watch_id] = cached
+            if fresh:
+                if fresh != cached:
+                    self._goals_cache[watch_id] = fresh
                     _save_goals_cache(self._goals_cache)
-            state["goals"] = cached  # oldest-first (chronological)
-            state["goals_count"] = len(cached)
+                state["goals"] = fresh
+            else:
+                state["goals"] = cached
+            state["goals_count"] = len(state["goals"])
 
         h = _state_hash(state)
 
