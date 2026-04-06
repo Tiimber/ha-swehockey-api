@@ -496,14 +496,20 @@ _BUTTON_AUTOMATIONS = """\
               data:
                 topic: "__PREFIX__/notify"
                 payload: >-
-                  __AWTRIX_DRAW_HDR__{%- set _nht = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'next_home_team') | default('') | string -%}
+                  {%- set _nht = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'next_home_team') | default('') | string -%}
                   {%- set _nat = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'next_away_team') | default('') | string -%}
+                  {%- set _ndt = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'next_datetime') | default('') | string -%}
                   {%- set _nt = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'next_time') | default('?') | string -%}
-                  {%- set _nhslug = _ts(_nht) -%}
-                  {%- set _naslug = _ts(_nat) -%}
-                  {%- set _nhd = _ld[_nhslug] if _nhslug in _ld else _fl -%}
-                  {%- set _nad = _rd[_naslug] if _naslug in _rd else _fr -%}
-                  {"draw":[{{ _nhd }},{{ _nad }}],"text":[{"t":"@ ","c":"888888"},{"t":"{{ _nt }}","c":"FFD700"}],"duration":10,"stack":false}
+                  {%- set _months = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'] -%}
+                  {%- if _ndt -%}
+                  {%- set _d = _ndt[8:10] | int -%}
+                  {%- set _m = _ndt[5:7] | int -%}
+                  {%- set _suf = 'st' if _d in [1,21,31] else 'nd' if _d in [2,22] else 'rd' if _d in [3,23] else 'th' -%}
+                  {%- set _date_str = (_d | string) ~ _suf ~ ' ' ~ _months[_m - 1] -%}
+                  {%- else -%}
+                  {%- set _date_str = '' -%}
+                  {%- endif -%}
+                  {"text":"{{ _nht }} - {{ _nat }}{% if _date_str %}, {{ _date_str }}{% endif %} @ {{ _nt }}","repeat":1,"stack":false}
       default:
         - service: input_text.set_value
           target:
