@@ -476,8 +476,8 @@ _BUTTON_AUTOMATIONS = """\
       data:
         value: "{{ trigger.payload }}"
 
-- alias: "AWTRIX - Knapp: visa målhistorik"
-  id: "awtrix_button_goal_history"
+- alias: "AWTRIX - Knapp: visa detaljer"
+  id: "awtrix_button_details"
   mode: single
   max_exceeded: silent
   trigger:
@@ -488,6 +488,10 @@ _BUTTON_AUTOMATIONS = """\
     current_app: "{{ states('input_text.awtrix_current_app') }}"
     slug: "{{ current_app[7:] if current_app.startswith('hockey_') else '' }}"
     is_hockey: "{{ slug != '' }}"
+    status: >
+      {{ states('sensor.hockeylive_' ~ slug ~ '_status') if slug != '' else '' }}
+    is_upcoming: >
+      {{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}
     goals: >
       {{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals')
          if slug != '' else [] }}
@@ -501,43 +505,60 @@ _BUTTON_AUTOMATIONS = """\
   condition:
     - "{{ is_hockey }}"
   action:
-    - service: input_number.set_value
-      target:
-        entity_id: input_number.awtrix_goal_idx
-      data:
-        value: "{{ new_idx | int }}"
-    - service: input_text.set_value
-      target:
-        entity_id: input_text.awtrix_goal_app
-      data:
-        value: "{{ current_app }}"
     - choose:
         - conditions:
-            - "{{ (n | int) == 0 }}"
+            - "{{ is_upcoming }}"
           sequence:
             - service: mqtt.publish
               data:
                 topic: "__PREFIX__/notify"
-                payload: '{"text":"Inga m\u00e5l","duration":5,"stack":false}'
+                payload: >-
+                  __AWTRIX_DRAW_HDR__{%- set _nht = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'next_home_team') | default('') | string -%}
+                  {%- set _nat = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'next_away_team') | default('') | string -%}
+                  {%- set _nt = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'next_time') | default('?') | string -%}
+                  {%- set _nhslug = _ts(_nht) -%}
+                  {%- set _naslug = _ts(_nat) -%}
+                  {%- set _nhd = _ld[_nhslug] if _nhslug in _ld else _fl -%}
+                  {%- set _nad = _rd[_naslug] if _naslug in _rd else _fr -%}
+                  {"draw":[{{ _nhd }},{{ _nad }}],"text":[{"t":"@ ","c":"888888"},{"t":"{{ _nt }}","c":"FFD700"}],"duration":10,"stack":false}
       default:
-        - service: mqtt.publish
+        - service: input_number.set_value
+          target:
+            entity_id: input_number.awtrix_goal_idx
           data:
-            topic: "__PREFIX__/notify"
-            payload: >-
-              __AWTRIX_DRAW_HDR__{%- set sc = goal.scorer | default('?') -%}
-              {%- set ass = goal.assists | default([]) -%}
-              {%- set sit = goal.situation | default('') -%}
-              {%- set per = goal.period | default('') -%}
-              {%- set clk = goal.period_clock | default('') -%}
-              {%- set gt = goal.team | default('') -%}
-              {%- set hs = goal.home_score_after | default(0) | int -%}
-              {%- set as_ = goal.away_score_after | default(0) | int -%}
-              {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default('') -%}
-              {%- set goal_is_home = (gt == home_t) -%}
-              {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
-              {%- set _gslug = _ts(gt) -%}
-              {%- set _gd = _ld[_gslug] if _gslug in _ld else _fl -%}
-              {"draw":[{{ _gd }}],"text":[{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}: ","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}: ","c":"FFD700"}{% endif %},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" - Ass: {{ ass | join(', ') }}","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"duration":15,"stack":false}
+            value: "{{ new_idx | int }}"
+        - service: input_text.set_value
+          target:
+            entity_id: input_text.awtrix_goal_app
+          data:
+            value: "{{ current_app }}"
+        - choose:
+            - conditions:
+                - "{{ (n | int) == 0 }}"
+              sequence:
+                - service: mqtt.publish
+                  data:
+                    topic: "__PREFIX__/notify"
+                    payload: '{"text":"Inga m\u00e5l","duration":5,"stack":false}'
+          default:
+            - service: mqtt.publish
+              data:
+                topic: "__PREFIX__/notify"
+                payload: >-
+                  __AWTRIX_DRAW_HDR__{%- set sc = goal.scorer | default('?') -%}
+                  {%- set ass = goal.assists | default([]) -%}
+                  {%- set sit = goal.situation | default('') -%}
+                  {%- set per = goal.period | default('') -%}
+                  {%- set clk = goal.period_clock | default('') -%}
+                  {%- set gt = goal.team | default('') -%}
+                  {%- set hs = goal.home_score_after | default(0) | int -%}
+                  {%- set as_ = goal.away_score_after | default(0) | int -%}
+                  {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default('') -%}
+                  {%- set goal_is_home = (gt == home_t) -%}
+                  {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
+                  {%- set _gslug = _ts(gt) -%}
+                  {%- set _gd = _ld[_gslug] if _gslug in _ld else _fl -%}
+                  {"draw":[{{ _gd }}],"text":[{% if goal_is_home %}{"t":"{{ hs }}","c":"FFD700"},{"t":"-{{ as_ }}: ","c":"FFFFFF"}{% else %}{"t":"{{ hs }}-","c":"FFFFFF"},{"t":"{{ as_ }}: ","c":"FFD700"}{% endif %},{"t":"{{ sc }}","c":"FFFFFF"}{% if ass %},{"t":" - Ass: {{ ass | join(', ') }}","c":"888888"}{% endif %},{"t":" - {{ per }} {{ clk }}","c":"999999"}{% if sit not in ['EQ','ES',''] %},{"t":" {{ sit }}","c":"{{ sitc }}"}{% endif %}],"duration":15,"stack":false}
 """
 
 
