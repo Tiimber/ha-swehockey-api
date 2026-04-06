@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260406_9300
+ARG CACHEBUST=20260406_9400
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -747,6 +747,26 @@ class MQTTPublisher:
         _save_entities(tracked)
         logger.info("MQTT entities removed for watch %s", watch_id)
 
+    def publish_global_discovery(self, awtrix_prefix: str) -> None:
+        """Publish MQTT discovery for the AWTRIX currentApp sensor.
+
+        Creates sensor.awtrix_current_app in HA that mirrors the AWTRIX
+        stats/currentApp MQTT topic.  Used by button automations to
+        determine which hockey app is currently on screen.
+        """
+        if not self._connected or not self._client:
+            return
+        cfg = json.dumps({
+            "name": "AWTRIX Current App",
+            "unique_id": "awtrix_current_app",
+            "state_topic": f"{awtrix_prefix}/stats/currentApp",
+            "icon": "mdi:view-carousel",
+            "entity_category": "diagnostic",
+        })
+        topic = _discovery_topic("sensor", "awtrix_current_app")
+        self._pub(topic, cfg)
+        logger.info("MQTT global discovery: awtrix_current_app sensor published")
+
 
 # ---------------------------------------------------------------------------
 # Factory
@@ -1209,10 +1229,6 @@ input_number:
     initial: 0
 
 input_text:
-  awtrix_current_app:
-    name: "AWTRIX Aktiv app"
-    max: 64
-    initial: ""
   awtrix_goal_app:
     name: "AWTRIX Mål app"
     max: 64
@@ -1225,20 +1241,6 @@ input_text:
 # These are appended once (not per watch) and use __PREFIX__ substitution.
 # ---------------------------------------------------------------------------
 _BUTTON_AUTOMATIONS = """\
-- alias: "AWTRIX - Spåra aktiv app"
-  id: "awtrix_track_active_app"
-  mode: queued
-  max: 5
-  trigger:
-    - platform: mqtt
-      topic: "__PREFIX__/stats/currentApp"
-  action:
-    - service: input_text.set_value
-      target:
-        entity_id: input_text.awtrix_current_app
-      data:
-        value: "{{ trigger.payload }}"
-
 - alias: "AWTRIX - Knapp: visa detaljer"
   id: "awtrix_button_details"
   mode: single
@@ -1248,13 +1250,11 @@ _BUTTON_AUTOMATIONS = """\
       topic: "__PREFIX__/stats/buttonSelect"
       payload: "1"
   variables:
-    current_app: "{{ states('input_text.awtrix_current_app') }}"
+    current_app: "{{ states('sensor.awtrix_current_app') }}"
     slug: "{{ current_app[7:] if current_app.startswith('hockey_') else '' }}"
     is_hockey: "{{ slug != '' }}"
-    status: >
-      {{ states('sensor.hockeylive_' ~ slug ~ '_status') if slug != '' else '' }}
-    is_upcoming: >
-      {{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}
+    status: "{{ states('sensor.hockeylive_' ~ slug ~ '_status') if slug != '' else '' }}"
+    is_upcoming: "{{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}"
     goals: >
       {{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals')
          if slug != '' else [] }}
@@ -1316,7 +1316,7 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set gt = goal.team | default('') -%}
                   {%- set hs = goal.home_score_after | default(0) | int -%}
                   {%- set as_ = goal.away_score_after | default(0) | int -%}
-                  {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default('') -%}
+                  {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default(state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'last_home_team')) | default('') -%}
                   {%- set goal_is_home = (gt == home_t) -%}
                   {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
                   {%- set _gslug = _ts(gt) -%}

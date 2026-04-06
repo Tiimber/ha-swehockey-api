@@ -613,6 +613,26 @@ class MQTTPublisher:
         _save_entities(tracked)
         logger.info("MQTT entities removed for watch %s", watch_id)
 
+    def publish_global_discovery(self, awtrix_prefix: str) -> None:
+        """Publish MQTT discovery for the AWTRIX currentApp sensor.
+
+        Creates sensor.awtrix_current_app in HA that mirrors the AWTRIX
+        stats/currentApp MQTT topic.  Used by button automations to
+        determine which hockey app is currently on screen.
+        """
+        if not self._connected or not self._client:
+            return
+        cfg = json.dumps({
+            "name": "AWTRIX Current App",
+            "unique_id": "awtrix_current_app",
+            "state_topic": f"{awtrix_prefix}/stats/currentApp",
+            "icon": "mdi:view-carousel",
+            "entity_category": "diagnostic",
+        })
+        topic = _discovery_topic("sensor", "awtrix_current_app")
+        self._pub(topic, cfg)
+        logger.info("MQTT global discovery: awtrix_current_app sensor published")
+
 
 # ---------------------------------------------------------------------------
 # Factory

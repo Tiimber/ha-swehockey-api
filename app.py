@@ -264,6 +264,18 @@ async def lifespan(app: FastAPI):
         )
         for watch in watches.values():
             _mqtt_pub.publish_discovery(watch)
+        # Publish global MQTT discovery for AWTRIX currentApp sensor so
+        # button automations can read which app is on screen without
+        # needing input_text helpers that require a HA restart.
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+            _opts = _json.loads(_Path("/data/options.json").read_text(encoding="utf-8"))
+            _awtrix_prefix = (_opts.get("awtrix_prefix") or "").strip()
+            if _awtrix_prefix:
+                _mqtt_pub.publish_global_discovery(_awtrix_prefix)
+        except Exception as _e:
+            print(f"[MQTT] Could not publish global AWTRIX discovery: {_e}", flush=True)
         await _publish_all_watch_states()
         print("[MQTT] Startup complete", flush=True)
     else:

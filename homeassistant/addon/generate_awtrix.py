@@ -446,10 +446,6 @@ input_number:
     initial: 0
 
 input_text:
-  awtrix_current_app:
-    name: "AWTRIX Aktiv app"
-    max: 64
-    initial: ""
   awtrix_goal_app:
     name: "AWTRIX Mål app"
     max: 64
@@ -462,20 +458,6 @@ input_text:
 # These are appended once (not per watch) and use __PREFIX__ substitution.
 # ---------------------------------------------------------------------------
 _BUTTON_AUTOMATIONS = """\
-- alias: "AWTRIX - Spåra aktiv app"
-  id: "awtrix_track_active_app"
-  mode: queued
-  max: 5
-  trigger:
-    - platform: mqtt
-      topic: "__PREFIX__/stats/currentApp"
-  action:
-    - service: input_text.set_value
-      target:
-        entity_id: input_text.awtrix_current_app
-      data:
-        value: "{{ trigger.payload }}"
-
 - alias: "AWTRIX - Knapp: visa detaljer"
   id: "awtrix_button_details"
   mode: single
@@ -485,13 +467,11 @@ _BUTTON_AUTOMATIONS = """\
       topic: "__PREFIX__/stats/buttonSelect"
       payload: "1"
   variables:
-    current_app: "{{ states('input_text.awtrix_current_app') }}"
+    current_app: "{{ states('sensor.awtrix_current_app') }}"
     slug: "{{ current_app[7:] if current_app.startswith('hockey_') else '' }}"
     is_hockey: "{{ slug != '' }}"
-    status: >
-      {{ states('sensor.hockeylive_' ~ slug ~ '_status') if slug != '' else '' }}
-    is_upcoming: >
-      {{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}
+    status: "{{ states('sensor.hockeylive_' ~ slug ~ '_status') if slug != '' else '' }}"
+    is_upcoming: "{{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}"
     goals: >
       {{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals')
          if slug != '' else [] }}
@@ -553,7 +533,7 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set gt = goal.team | default('') -%}
                   {%- set hs = goal.home_score_after | default(0) | int -%}
                   {%- set as_ = goal.away_score_after | default(0) | int -%}
-                  {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default('') -%}
+                  {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default(state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'last_home_team')) | default('') -%}
                   {%- set goal_is_home = (gt == home_t) -%}
                   {%- set sitc = 'FFD700' if sit in ['PP','PP1','PP2'] else '00AAFF' if sit in ['SH','SH2'] else 'FF8800' if sit == 'EN' else 'FFFFFF' -%}
                   {%- set _gslug = _ts(gt) -%}
