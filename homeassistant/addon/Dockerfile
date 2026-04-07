@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260407_10003
+ARG CACHEBUST=20260407_10004
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1083,18 +1083,13 @@ def _draw_from_colors(colors, x_offset=0, slug=""):
     else:
         p, s, a = "#444444", "#888888", None
 
-    # Pre-compute letter pixel coordinates so logo skips them entirely.
-    abbr = _TEAM_ABBR.get(slug, "")
-    skip = _abbr_pixel_coords(abbr, x_offset) if abbr else set()
-
     parts = []
 
     def seg(x0, y, x1, color):
         x0 += x_offset
         x1 += x_offset
         for x in range(x0, x1 + 1):
-            if (x, y) not in skip:
-                parts.append(f'{{"dp":[{x},{y},"{color}"]}}')
+            parts.append(f'{{"dp":[{x},{y},"{color}"]}}')
 
     for r in range(8):
         if a is None:
@@ -1104,10 +1099,6 @@ def _draw_from_colors(colors, x_offset=0, slug=""):
             seg(0, r, min(7, 5 - r), p)
             seg(max(0, 6 - r), r, min(7, 7 - r), s)
             seg(max(0, 8 - r), r, 7, a)
-
-    # Overlay abbreviation pixels if available
-    if abbr:
-        parts.extend(_abbr_pixels(abbr, x_offset, (p, s, a)))
 
     return ",".join(parts)
 

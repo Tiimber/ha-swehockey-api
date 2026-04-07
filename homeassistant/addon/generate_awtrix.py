@@ -261,19 +261,11 @@ def _tslug(name: str) -> str:
 
 
 def _draw_from_colors(colors: tuple | None, x_offset: int = 0, slug: str = "") -> str:
-    """Generate diagonal draw commands at x_offset for a color triple (p, s, a).
-    If slug is given and has an abbreviation, overlays 3×5 pixel-font letters.
-    """
+    """Generate diagonal draw commands at x_offset for a color triple (p, s, a)."""
     if colors:
         p, s, a = colors
     else:
         p, s, a = "#444444", "#888888", None
-
-    # Pre-compute letter pixel coordinates so logo skips them entirely.
-    # This ensures letters are the sole writer at those positions —
-    # works regardless of whether AWTRIX uses first-write or last-write.
-    abbr = _TEAM_ABBR.get(slug, "")
-    skip: set[tuple[int, int]] = _abbr_pixel_coords(abbr, x_offset) if abbr else set()
 
     parts: list[str] = []
 
@@ -281,8 +273,7 @@ def _draw_from_colors(colors: tuple | None, x_offset: int = 0, slug: str = "") -
         x0 += x_offset
         x1 += x_offset
         for x in range(x0, x1 + 1):
-            if (x, y) not in skip:
-                parts.append(f'{{"dp":[{x},{y},"{color}"]}}')
+            parts.append(f'{{"dp":[{x},{y},"{color}"]}}')
 
     for r in range(8):
         if a is None:
@@ -292,9 +283,6 @@ def _draw_from_colors(colors: tuple | None, x_offset: int = 0, slug: str = "") -
             seg(0, r, min(7, 5 - r), p)
             seg(max(0, 6 - r), r, min(7, 7 - r), s)
             seg(max(0, 8 - r), r, 7, a)
-
-    if abbr:
-        parts.extend(_abbr_pixels(abbr, x_offset, (p, s, a)))
 
     return ",".join(parts)
 
