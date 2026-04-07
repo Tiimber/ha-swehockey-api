@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260407_10004
+ARG CACHEBUST=20260407_10005
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1093,12 +1093,12 @@ def _draw_from_colors(colors, x_offset=0, slug=""):
 
     for r in range(8):
         if a is None:
-            seg(0, r, 7 - r, p)
-            seg(8 - r, r, 7, s)
+            seg(0, r, min(7, 6 - r), p)
+            seg(max(0, 7 - r), r, 7, s)
         else:
             seg(0, r, min(7, 5 - r), p)
-            seg(max(0, 6 - r), r, min(7, 7 - r), s)
-            seg(max(0, 8 - r), r, 7, a)
+            seg(max(0, 6 - r), r, min(7, 8 - r), s)
+            seg(max(0, 9 - r), r, 7, a)
 
     return ",".join(parts)
 
