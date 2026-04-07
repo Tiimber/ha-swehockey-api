@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260407_10008
+ARG CACHEBUST=20260407_10009
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -997,8 +997,8 @@ def _abbr_pixels(abbr, x_off, colors):
 # ---------------------------------------------------------------------------
 _TEAM_COLORS = {
     # SHL
-    "brynas_if": ("#3a3a3a", "#ffffff", "#fecc03"),
-    "brynas": ("#3a3a3a", "#ffffff", "#fecc03"),
+    "brynas_if": ("#1e1e1e", "#ffffff", "#fecc03"),
+    "brynas": ("#1e1e1e", "#ffffff", "#fecc03"),
     "djurgardens_if": ("#fbea05", "#db0d1a", "#1261ab"),
     "djurgardens": ("#fbea05", "#db0d1a", "#1261ab"),
     "farjestad_bk": ("#ffffff", "#008e4f", "#e5b843"),
@@ -1010,17 +1010,17 @@ _TEAM_COLORS = {
     "linkoping_hc": ("#052d5c", "#ffffff", "#b10c21"),
     "linkoping": ("#052d5c", "#ffffff", "#b10c21"),
     "lhc": ("#052d5c", "#ffffff", "#b10c21"),
-    "lulea_hf": ("#3a3a3a", "#d10c12", "#fdcd01"),
-    "lulea": ("#3a3a3a", "#d10c12", "#fdcd01"),
-    "malmo_redhawks": ("#ffffff", "#bb0b2e", "#3a3a3a"),
-    "malmo": ("#ffffff", "#bb0b2e", "#3a3a3a"),
+    "lulea_hf": ("#1e1e1e", "#d10c12", "#fdcd01"),
+    "lulea": ("#1e1e1e", "#d10c12", "#fdcd01"),
+    "malmo_redhawks": ("#ffffff", "#bb0b2e", "#1e1e1e"),
+    "malmo": ("#ffffff", "#bb0b2e", "#1e1e1e"),
     "modo_hockey": ("#cf1f2d", "#ffffff", "#2c5235"),
     "modo": ("#cf1f2d", "#ffffff", "#2c5235"),
     "rogle_bk": ("#ffffff", "#067b35", "#a4272a"),
     "rogle": ("#ffffff", "#067b35", "#a4272a"),
-    "skelleftea_aik": ("#fbba14", "#3a3a3a", None),
-    "skelleftea": ("#fbba14", "#3a3a3a", None),
-    "saik": ("#fbba14", "#3a3a3a", None),
+    "skelleftea_aik": ("#fbba14", "#1e1e1e", None),
+    "skelleftea": ("#fbba14", "#1e1e1e", None),
+    "saik": ("#fbba14", "#1e1e1e", None),
     "timra_ik": ("#e32f25", "#ffffff", "#104999"),
     "timra": ("#e32f25", "#ffffff", "#104999"),
     "orebro_hk": ("#e3032a", "#ffffff", None),
@@ -1028,7 +1028,7 @@ _TEAM_COLORS = {
     "vaxjo_lakers": ("#052f5d", "#eb7229", "#ffffff"),
     "vaxjo": ("#052f5d", "#eb7229", "#ffffff"),
     # HockeyAllsvenskan
-    "aik": ("#3a3a3a", "#FFD700", None),
+    "aik": ("#1e1e1e", "#FFD700", None),
     "almtuna_is": ("#CC0000", "#FFD700", "#ffffff"),
     "almtuna": ("#CC0000", "#FFD700", "#ffffff"),
     "bik_karlskoga": ("#0b2d74", "#ffffff", None),
@@ -1046,12 +1046,12 @@ _TEAM_COLORS = {
     "lif": ("#0d3579", "#ffffff", None),
     "mora_ik": ("#e42313", "#fcda00", "#007d32"),
     "mora": ("#e42313", "#fcda00", "#007d32"),
-    "nybro_vikings_if": ("#e73137", "#3a3a3a", "#fed68f"),
-    "nybro": ("#e73137", "#3a3a3a", "#fed68f"),
+    "nybro_vikings_if": ("#e73137", "#1e1e1e", "#fed68f"),
+    "nybro": ("#e73137", "#1e1e1e", "#fed68f"),
     "tingsryd_aif": ("#CC0000", "#FFFFFF", None),
     "tingsryd": ("#CC0000", "#FFFFFF", None),
-    "vik_vasteras_hk": ("#fdd200", "#3a3a3a", None),
-    "vasteras": ("#fdd200", "#3a3a3a", None),
+    "vik_vasteras_hk": ("#fdd200", "#1e1e1e", None),
+    "vasteras": ("#fdd200", "#1e1e1e", None),
     "vastervik_ik": ("#007755", "#FFFFFF", None),
     "vastervik": ("#007755", "#FFFFFF", None),
     "sodertalje_sk": ("#1264b0", "#fddf00", "#d4b882"),
@@ -1062,8 +1062,8 @@ _TEAM_COLORS = {
     "kalmar": ("#ac0e09", "#ffffff", "#f1da9e"),
     "troja_ljungby": ("#dc2f34", "#ffffff", None),
     "troja": ("#dc2f34", "#ffffff", None),
-    "vimmerby_hockey": ("#fddd01", "#3a3a3a", "#ffffff"),
-    "vimmerby": ("#fddd01", "#3a3a3a", "#ffffff"),
+    "vimmerby_hockey": ("#fddd01", "#1e1e1e", "#ffffff"),
+    "vimmerby": ("#fddd01", "#1e1e1e", "#ffffff"),
     "ostersunds_ik": ("#fded00", "#006633", None),
     "ostersund": ("#fded00", "#006633", None),
 }
