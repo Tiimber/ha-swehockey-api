@@ -272,8 +272,12 @@ def _draw_from_colors(colors: tuple | None, x_offset: int = 0, slug: str = "") -
     def seg(x0: int, y: int, x1: int, color: str) -> None:
         x0 += x_offset
         x1 += x_offset
-        for x in range(x0, x1 + 1):
-            parts.append(f'{{"dp":[{x},{y},"{color}"]}}')
+        if x0 > x1:
+            return
+        if x0 == x1:
+            parts.append(f'{{"dp":[{x0},{y},"{color}"]}}')
+        else:
+            parts.append(f'{{"dl":[{x0},{y},{x1},{y},"{color}"]}}')
 
     for r in range(8):
         if a is None:
