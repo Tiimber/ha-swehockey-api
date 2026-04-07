@@ -140,25 +140,34 @@ def _pixel_bg_color(x: int, y: int, colors: tuple | None, x_offset: int) -> str:
             return a or p
 
 
-def _abbr_pixels(abbr: str, x_off: int, colors: tuple | None) -> list[str]:
-    """Return dp draw commands for abbr overlaid on an 8×8 logo at x_off.
-
-    Layout:
-      2 chars: top-left (x_off+0, y=0), bottom-right (x_off+5, y=3)
-      3 chars: top-left (x_off+0, y=0), top-right (x_off+5, y=0),
-               bottom-center (x_off+2, y=3)
-      4 chars: TL (0,0), TR (4,0), BL (0,3), BR (4,3)
-    """
+def _abbr_char_positions(abbr: str, x_off: int):
+    """Return list of (char, px, py) anchor positions for the abbreviation."""
     n = len(abbr)
     if n == 2:
-        positions = [(x_off + 0, 0), (x_off + 5, 3)]
+        anchors = [(x_off + 0, 0), (x_off + 5, 3)]
     elif n == 3:
-        positions = [(x_off + 0, 0), (x_off + 5, 0), (x_off + 2, 3)]
+        anchors = [(x_off + 0, 0), (x_off + 5, 0), (x_off + 2, 3)]
     else:  # 4
-        positions = [(x_off + 0, 0), (x_off + 4, 0), (x_off + 0, 3), (x_off + 4, 3)]
+        anchors = [(x_off + 0, 0), (x_off + 4, 0), (x_off + 0, 3), (x_off + 4, 3)]
+    return list(zip(abbr, anchors))
 
+
+def _abbr_pixel_coords(abbr: str, x_off: int) -> set[tuple[int, int]]:
+    """Return the set of (x, y) coordinates occupied by abbreviation pixels."""
+    coords: set[tuple[int, int]] = set()
+    for ch, (px, py) in _abbr_char_positions(abbr, x_off):
+        rows = _FONT3X5.get(ch.upper(), _FONT3X5.get("X", [0] * 5))
+        for dy, row_bits in enumerate(rows):
+            for dx in range(3):
+                if row_bits & (0b100 >> dx):
+                    coords.add((px + dx, py + dy))
+    return coords
+
+
+def _abbr_pixels(abbr: str, x_off: int, colors: tuple | None) -> list[str]:
+    """Return dp draw commands for abbr overlaid on an 8×8 logo at x_off."""
     parts: list[str] = []
-    for ch, (px, py) in zip(abbr, positions):
+    for ch, (px, py) in _abbr_char_positions(abbr, x_off):
         rows = _FONT3X5.get(ch.upper(), _FONT3X5.get("X", [0] * 5))
         for dy, row_bits in enumerate(rows):
             for dx in range(3):
@@ -260,13 +269,20 @@ def _draw_from_colors(colors: tuple | None, x_offset: int = 0, slug: str = "") -
     else:
         p, s, a = "#444444", "#888888", None
 
+    # Pre-compute letter pixel coordinates so logo skips them entirely.
+    # This ensures letters are the sole writer at those positions —
+    # works regardless of whether AWTRIX uses first-write or last-write.
+    abbr = _TEAM_ABBR.get(slug, "")
+    skip: set[tuple[int, int]] = _abbr_pixel_coords(abbr, x_offset) if abbr else set()
+
     parts: list[str] = []
 
     def seg(x0: int, y: int, x1: int, color: str) -> None:
         x0 += x_offset
         x1 += x_offset
         for x in range(x0, x1 + 1):
-            parts.append(f'{{"dp":[{x},{y},"{color}"]}}')
+            if (x, y) not in skip:
+                parts.append(f'{{"dp":[{x},{y},"{color}"]}}')
 
     for r in range(8):
         if a is None:
@@ -277,8 +293,6 @@ def _draw_from_colors(colors: tuple | None, x_offset: int = 0, slug: str = "") -
             seg(max(0, 6 - r), r, min(7, 7 - r), s)
             seg(max(0, 8 - r), r, 7, a)
 
-    # Overlay abbreviation pixels if available
-    abbr = _TEAM_ABBR.get(slug, "")
     if abbr:
         parts.extend(_abbr_pixels(abbr, x_offset, (p, s, a)))
 
