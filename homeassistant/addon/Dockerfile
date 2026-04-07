@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260407_10007
+ARG CACHEBUST=20260407_10008
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1314,8 +1314,8 @@ _T = """\
           {%- set score = state_attr('sensor.hockeylive___SLUG___status','score') -%}
           {%- set sitc = 'FFD700' if sit == 'PP' else '00AAFF' if sit == 'SH' else 'FFFFFF' -%}
           {%- set own_goal = (team|lower|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('é','e')|replace('ü','u')|replace(' ','_')|replace('-','_')|replace('.','')) == '__SLUG__' -%}
-          {%- set rtttl = 'goal:d=8,o=5,b=140:c6,e6,g6,c7' if own_goal else 'opp:d=8,o=5,b=140:c7,g6,e6,c6' -%}
-          {"draw":[__TEAMDRAW__],"text":[{"t":"MAL! ","c":"FFD700"},{"t":"{{ sc }}","c":"FFFFFF"},{"t":" {{ score }}","c":"FFD700"}{% if ass %},{"t":" Ass: {{ ass|join(', ') }}","c":"888888"}{% endif %}{% if sit not in ['ES',''] %},{"t":" ({{ sit }})","c":"{{ sitc }}"}{% endif %}],"rtttl":"{{ rtttl }}","duration":30,"stack":false,"wakeup":true}
+          {%- set rtttl = 'goal:d=8,o=5,b=200:c6,e6,g6,p,c6,e6,g6,c7,g6,c7' if own_goal else 'opp:d=8,o=5,b=140:c7,g6,e6,c6' -%}
+          {"draw":[__TEAMDRAW__],"text":[{"t":"     MAL! ","c":"FFD700"},{"t":"{{ sc }}","c":"FFFFFF"},{"t":" {{ score }}","c":"FFD700"}{% if ass %},{"t":" Ass: {{ ass|join(', ') }}","c":"888888"}{% endif %}{% if sit not in ['ES',''] %},{"t":" ({{ sit }})","c":"{{ sitc }}"}{% endif %}],"rtttl":"{{ rtttl }}","duration":30,"stack":false,"wakeup":true}
 
 - alias: "AWTRIX __NAME__ - Match slut"
   id: "awtrix___WID___finished"
