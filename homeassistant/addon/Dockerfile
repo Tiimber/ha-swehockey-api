@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260407_10010
+ARG CACHEBUST=20260407_10011
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1483,7 +1483,14 @@ _BUTTON_AUTOMATIONS = """\
                 topic: "__PREFIX__/notify"
                 payload: >-
                   {%- set goal_iter = goals | sort(attribute='game_time_secs') if status == 'finished_today' else goals | sort(attribute='game_time_secs', reverse=true) -%}
-                  {%- set home_t = state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'home_team') | default(state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'last_home_team')) | default('') | string -%}
+                  {%- set asc_goals = goals | sort(attribute='game_time_secs') -%}
+                  {%- set n_goals = asc_goals | length -%}
+                  {%- set ns_scan = namespace(prev_hs=0, home_flags=[]) -%}
+                  {%- for g in asc_goals -%}
+                  {%- set hs = g.home_score_after | default(0) | int -%}
+                  {%- set ns_scan.home_flags = ns_scan.home_flags + [(hs > ns_scan.prev_hs)] -%}
+                  {%- set ns_scan.prev_hs = hs -%}
+                  {%- endfor -%}
                   {%- set ns = namespace(segs=[]) -%}
                   {%- for g in goal_iter -%}
                   {%- if not loop.first -%}{%- set ns.segs = ns.segs + ['{"t":"   ","c":"FFFFFF"}'] -%}{%- endif -%}
@@ -1494,8 +1501,12 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set clk = g.period_clock | default('') -%}
                   {%- set sit = g.situation | default('') -%}
                   {%- set sit_str = ' ' ~ sit if sit not in ['EQ','ES',''] else '' -%}
-                  {%- set gt = g.team | default('') -%}
-                  {%- if gt == home_t -%}
+                  {%- if status == 'finished_today' -%}
+                  {%- set home_scored = ns_scan.home_flags[loop.index0] -%}
+                  {%- else -%}
+                  {%- set home_scored = ns_scan.home_flags[n_goals - loop.index] -%}
+                  {%- endif -%}
+                  {%- if home_scored -%}
                   {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '-","c":"FFD700"}', '{"t":"' ~ as_ ~ ' ","c":"FFFFFF"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
                   {%- else -%}
                   {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '-","c":"FFFFFF"}', '{"t":"' ~ as_ ~ ' ","c":"FFD700"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
