@@ -686,9 +686,9 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set home_scored = ns_scan.home_flags[n_goals - loop.index] -%}
                   {%- endif -%}
                   {%- if home_scored -%}
-                  {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '-","c":"FFD700"}', '{"t":"' ~ as_ ~ ' ","c":"FFFFFF"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
+                  {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '","c":"FFD700"}', '{"t":"-","c":"FFFFFF"}', '{"t":"' ~ as_ ~ ' ","c":"FFFFFF"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
                   {%- else -%}
-                  {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '-","c":"FFFFFF"}', '{"t":"' ~ as_ ~ ' ","c":"FFD700"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
+                  {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '","c":"FFFFFF"}', '{"t":"-","c":"FFFFFF"}', '{"t":"' ~ as_ ~ ' ","c":"FFD700"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
                   {%- endif -%}
                   {%- endfor -%}
                   {"text":[{{ ns.segs | join(',') }}],"duration":20,"stack":false}
