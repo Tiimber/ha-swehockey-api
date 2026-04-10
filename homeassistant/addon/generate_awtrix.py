@@ -583,10 +583,6 @@ input_text:
     max: 64
     initial: ""
 
-input_boolean:
-  awtrix_details_showing:
-    name: "AWTRIX Detaljer visas"
-
 """
 
 # ---------------------------------------------------------------------------
@@ -649,15 +645,17 @@ _BUTTON_AUTOMATIONS = """\
     is_upcoming: "{{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}"
     goals: "{{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals') if slug != '' else [] }}"
     n: "{{ (goals or []) | length }}"
-    details_showing: "{{ is_state('input_boolean.awtrix_details_showing', 'on') }}"
+    details_showing: "{{ states('input_number.awtrix_goal_idx') | int == 1 }}"
   action:
     - choose:
         - conditions:
             - "{{ details_showing }}"
           sequence:
-            - service: input_boolean.turn_off
+            - service: input_number.set_value
               target:
-                entity_id: input_boolean.awtrix_details_showing
+                entity_id: input_number.awtrix_goal_idx
+              data:
+                value: 0
             - service: mqtt.publish
               data:
                 topic: "__PREFIX__/notify"
@@ -683,13 +681,17 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set _date_str = '' -%}
                   {%- endif -%}
                   {"text":"{{ _nht }} - {{ _nat }}{% if _date_str %}, {{ _date_str }}{% endif %} {{ _nt }}","repeat":1,"stack":false}
-            - service: input_boolean.turn_on
+            - service: input_number.set_value
               target:
-                entity_id: input_boolean.awtrix_details_showing
+                entity_id: input_number.awtrix_goal_idx
+              data:
+                value: 1
             - delay: "00:00:10"
-            - service: input_boolean.turn_off
+            - service: input_number.set_value
               target:
-                entity_id: input_boolean.awtrix_details_showing
+                entity_id: input_number.awtrix_goal_idx
+              data:
+                value: 0
         - conditions:
             - "{{ is_hockey and (n | int) == 0 }}"
           sequence:
@@ -702,13 +704,17 @@ _BUTTON_AUTOMATIONS = """\
               data:
                 topic: "__PREFIX__/notify"
                 payload: '{"text":"Inga m\u00e5l","duration":5,"stack":false}'
-            - service: input_boolean.turn_on
+            - service: input_number.set_value
               target:
-                entity_id: input_boolean.awtrix_details_showing
+                entity_id: input_number.awtrix_goal_idx
+              data:
+                value: 1
             - delay: "00:00:05"
-            - service: input_boolean.turn_off
+            - service: input_number.set_value
               target:
-                entity_id: input_boolean.awtrix_details_showing
+                entity_id: input_number.awtrix_goal_idx
+              data:
+                value: 0
         - conditions:
             - "{{ is_hockey }}"
           sequence:
@@ -752,13 +758,17 @@ _BUTTON_AUTOMATIONS = """\
                   {%- endif -%}
                   {%- endfor -%}
                   {"text":[{{ ns.segs | join(',') }}],"duration":20,"stack":false}
-            - service: input_boolean.turn_on
+            - service: input_number.set_value
               target:
-                entity_id: input_boolean.awtrix_details_showing
+                entity_id: input_number.awtrix_goal_idx
+              data:
+                value: 1
             - delay: "00:00:20"
-            - service: input_boolean.turn_off
+            - service: input_number.set_value
               target:
-                entity_id: input_boolean.awtrix_details_showing
+                entity_id: input_number.awtrix_goal_idx
+              data:
+                value: 0
 """
 
 
