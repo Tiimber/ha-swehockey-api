@@ -606,9 +606,9 @@ _BUTTON_AUTOMATIONS = """\
   mode: single
   max_exceeded: silent
   trigger:
-    - platform: mqtt
-      topic: "__PREFIX__/stats/buttonSelect"
-      payload: "1"
+    - platform: state
+      entity_id: "binary_sensor.__PREFIX___button_left"
+      to: "on"
   action:
     - service: mqtt.publish
       data:
@@ -620,9 +620,9 @@ _BUTTON_AUTOMATIONS = """\
   mode: single
   max_exceeded: silent
   trigger:
-    - platform: mqtt
-      topic: "__PREFIX__/stats/buttonSelect"
-      payload: "2"
+    - platform: state
+      entity_id: "binary_sensor.__PREFIX___button_right"
+      to: "on"
   action:
     - service: mqtt.publish
       data:
