@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260410_10018
+ARG CACHEBUST=20260410_10019
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1404,6 +1404,10 @@ input_text:
     max: 64
     initial: ""
 
+input_boolean:
+  awtrix_details_showing:
+    name: "AWTRIX Detaljer visas"
+
 """
 
 # ---------------------------------------------------------------------------
@@ -1466,12 +1470,21 @@ _BUTTON_AUTOMATIONS = """\
     is_upcoming: "{{ status in ['upcoming_far', 'upcoming_countdown', 'upcoming_prematch'] }}"
     goals: "{{ state_attr('sensor.hockeylive_' ~ slug ~ '_status', 'goals') if slug != '' else [] }}"
     n: "{{ (goals or []) | length }}"
-  condition:
-    - "{{ is_hockey }}"
+    details_showing: "{{ is_state('input_boolean.awtrix_details_showing', 'on') }}"
   action:
     - choose:
         - conditions:
-            - "{{ is_upcoming }}"
+            - "{{ details_showing }}"
+          sequence:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.awtrix_details_showing
+            - service: mqtt.publish
+              data:
+                topic: "__PREFIX__/notify"
+                payload: '{"duration":1,"text":"","stack":false}'
+        - conditions:
+            - "{{ is_hockey and is_upcoming }}"
           sequence:
             - service: mqtt.publish
               data:
@@ -1491,21 +1504,40 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set _date_str = '' -%}
                   {%- endif -%}
                   {"text":"{{ _nht }} - {{ _nat }}{% if _date_str %}, {{ _date_str }}{% endif %} {{ _nt }}","repeat":1,"stack":false}
-      default:
-        - service: input_text.set_value
-          target:
-            entity_id: input_text.awtrix_goal_app
-          data:
-            value: "{{ 'hockey_' ~ slug }}"
-        - choose:
-            - conditions:
-                - "{{ (n | int) == 0 }}"
-              sequence:
-                - service: mqtt.publish
-                  data:
-                    topic: "__PREFIX__/notify"
-                    payload: '{"text":"Inga m\u00e5l","duration":5,"stack":false}'
-          default:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.awtrix_details_showing
+            - delay: "00:00:10"
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.awtrix_details_showing
+        - conditions:
+            - "{{ is_hockey and (n | int) == 0 }}"
+          sequence:
+            - service: input_text.set_value
+              target:
+                entity_id: input_text.awtrix_goal_app
+              data:
+                value: "{{ 'hockey_' ~ slug }}"
+            - service: mqtt.publish
+              data:
+                topic: "__PREFIX__/notify"
+                payload: '{"text":"Inga m\u00e5l","duration":5,"stack":false}'
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.awtrix_details_showing
+            - delay: "00:00:05"
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.awtrix_details_showing
+        - conditions:
+            - "{{ is_hockey }}"
+          sequence:
+            - service: input_text.set_value
+              target:
+                entity_id: input_text.awtrix_goal_app
+              data:
+                value: "{{ 'hockey_' ~ slug }}"
             - service: mqtt.publish
               data:
                 topic: "__PREFIX__/notify"
@@ -1541,6 +1573,13 @@ _BUTTON_AUTOMATIONS = """\
                   {%- endif -%}
                   {%- endfor -%}
                   {"text":[{{ ns.segs | join(',') }}],"duration":20,"stack":false}
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.awtrix_details_showing
+            - delay: "00:00:20"
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.awtrix_details_showing
 """
 
 
