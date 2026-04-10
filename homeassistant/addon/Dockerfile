@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260410_10016
+ARG CACHEBUST=20260410_10017
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1433,7 +1433,7 @@ _BUTTON_AUTOMATIONS = """\
   action:
     - service: mqtt.publish
       data:
-        topic: "__PREFIX__/prevapp"
+        topic: "__PREFIX__/previousapp"
         payload: ""
 
 - alias: "AWTRIX - Knapp: nästa app"

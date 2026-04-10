@@ -612,7 +612,7 @@ _BUTTON_AUTOMATIONS = """\
   action:
     - service: mqtt.publish
       data:
-        topic: "__PREFIX__/prevapp"
+        topic: "__PREFIX__/previousapp"
         payload: ""
 
 - alias: "AWTRIX - Knapp: nästa app"
