@@ -601,6 +601,34 @@ _BUTTON_AUTOMATIONS = """\
         topic: "__PREFIX__/settings"
         payload: '{"BLOCKN":true}'
 
+- alias: "AWTRIX - Knapp: föregående app"
+  id: "awtrix_button_prev"
+  mode: single
+  max_exceeded: silent
+  trigger:
+    - platform: mqtt
+      topic: "__PREFIX__/stats/buttonSelect"
+      payload: "1"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "__PREFIX__/prevapp"
+        payload: ""
+
+- alias: "AWTRIX - Knapp: nästa app"
+  id: "awtrix_button_next"
+  mode: single
+  max_exceeded: silent
+  trigger:
+    - platform: mqtt
+      topic: "__PREFIX__/stats/buttonSelect"
+      payload: "2"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "__PREFIX__/nextapp"
+        payload: ""
+
 - alias: "AWTRIX - Knapp: visa detaljer"
   id: "awtrix_button_details"
   mode: restart
