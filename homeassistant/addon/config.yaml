@@ -42,6 +42,7 @@ options:
       season_ids: "18263, 19791"
       awtrix: false
       awtrix_icon: ""
+      goal_sound: false
 
 schema:
   awtrix_prefix: str
@@ -56,6 +57,7 @@ schema:
       season_ids: str
       awtrix: bool?
       awtrix_icon: str?
+      goal_sound: bool?
 
 # Persistent storage – watchlist.json and generated config land here
 map:

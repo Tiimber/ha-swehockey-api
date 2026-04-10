@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260410_10017
+ARG CACHEBUST=20260410_10018
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1315,7 +1315,7 @@ _T = """\
           {%- set sitc = 'FFD700' if sit == 'PP' else '00AAFF' if sit == 'SH' else 'FFFFFF' -%}
           {%- set own_goal = (team|lower|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('é','e')|replace('ü','u')|replace(' ','_')|replace('-','_')|replace('.','')) == '__SLUG__' -%}
           {%- set rtttl = 'goal:d=8,o=5,b=100:c4,p2,d4' if own_goal else 'opp:d=4,o=3,b=100:c2' -%}
-          {"draw":[__TEAMDRAW__],"text":[{"t":"     MAL! ","c":"FFD700"},{"t":"{{ sc }}","c":"FFFFFF"},{"t":" {{ score }}","c":"FFD700"}{% if ass %},{"t":" Ass: {{ ass|join(', ') }}","c":"888888"}{% endif %}{% if sit not in ['ES',''] %},{"t":" ({{ sit }})","c":"{{ sitc }}"}{% endif %}],"rtttl":"{{ rtttl }}","duration":30,"stack":false,"wakeup":true}
+          {"draw":[__TEAMDRAW__],"text":[{"t":"     MAL! ","c":"FFD700"},{"t":"{{ sc }}","c":"FFFFFF"},{"t":" {{ score }}","c":"FFD700"}{% if ass %},{"t":" Ass: {{ ass|join(', ') }}","c":"888888"}{% endif %}{% if sit not in ['ES',''] %},{"t":" ({{ sit }})","c":"{{ sitc }}"}{% endif %}]__GOAL_SOUND_RTTTL__,"duration":30,"stack":false,"wakeup":true}
 
 - alias: "AWTRIX __NAME__ - Match slut"
   id: "awtrix___WID___finished"
@@ -1575,7 +1575,7 @@ def main() -> None:
         name = w.get("name") or w.get("team", "")
         ow = opt_map.get(name, {})
         if ow.get("awtrix"):
-            enabled.append({**w, "awtrix_icon": (ow.get("awtrix_icon") or "").strip()})
+            enabled.append({**w, "awtrix_icon": (ow.get("awtrix_icon") or "").strip(), "goal_sound": bool(ow.get("goal_sound"))})
         else:
             disabled.append({**w})
 
@@ -1591,6 +1591,7 @@ def main() -> None:
         name = w.get("name") or w["team"]
         slug = _slugify(name)
         teamdraw = _team_draw_fragment(name)
+        goal_sound_rtttl = ',"rtttl":"{{ rtttl }}"' if w.get("goal_sound") else ''
         automation_blocks.append(
             _sub(
                 _T,
@@ -1601,6 +1602,7 @@ def main() -> None:
                 AWTRIX_DRAW_HDR=awtrix_draw_hdr,
                 APP=f"hockey_{slug}",
                 PREFIX=prefix,
+                GOAL_SOUND_RTTTL=goal_sound_rtttl,
             )
         )
 
