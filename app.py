@@ -75,6 +75,11 @@ _schedule_cache: dict[int, dict] = {}
 # Populated on first request after the game ends; survives across polls.
 _finished_game_goals_cache: dict[int, list] = {}
 
+# Cache of game_ids discovered via fetch_game_id_by_date.
+# Keyed by (date, home_team, away_team) so it survives schedule cache refreshes
+# which replace all game dicts (losing any game_id written directly into them).
+_live_game_id_cache: dict[tuple, int] = {}
+
 # Poll intervals (seconds)
 CACHE_TTL_LIVE = 30  # game in progress
 CACHE_TTL_GAME_DAY = 3600  # game scheduled today, not yet started
@@ -385,19 +390,18 @@ def _live_detail(game: dict) -> dict:
 
     # The season schedule page omits the Game/Events link for live (in-progress)
     # games.  When game_id is missing, try the GamesByDate page which always
-    # includes it.  Cache the result back into the game dict to avoid a lookup
-    # on every subsequent call.
-    if (
-        not game_id
-        and game.get("date")
-        and game.get("home_team")
-        and game.get("away_team")
-    ):
-        game_id = scraper.fetch_game_id_by_date(
-            game["date"], game["home_team"], game["away_team"]
-        )
-        if game_id:
-            game["game_id"] = game_id  # persist in cache so next call is free
+    # includes it.  Store the result in a module-level cache keyed by
+    # (date, home_team, away_team) so it survives schedule cache refreshes
+    # (which replace all game dicts every 30s, losing any game_id stored in them).
+    if not game_id:
+        _key = (game.get("date"), game.get("home_team"), game.get("away_team"))
+        game_id = _live_game_id_cache.get(_key)
+        if not game_id and all(_key):
+            game_id = scraper.fetch_game_id_by_date(
+                game["date"], game["home_team"], game["away_team"]
+            )
+            if game_id:
+                _live_game_id_cache[_key] = game_id
 
     events_data = scraper.fetch_game_events(game_id)
 
