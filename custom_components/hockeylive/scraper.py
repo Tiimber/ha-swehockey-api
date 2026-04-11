@@ -163,12 +163,14 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
             continue
 
         game_id: Optional[int] = None
+        game_id_in_score_cell = False
         for ci in range(score_cell_idx, min(score_cell_idx + 3, n)):
             link = cells[ci].find("a")
             if link:
                 gm = re.search(r"Game/Events/(\d+)", link.get("href", ""))
                 if gm:
                     game_id = int(gm.group(1))
+                    game_id_in_score_cell = (ci == score_cell_idx)
                     break
 
         home_score = away_score = None
@@ -186,6 +188,9 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
         except ValueError:
             pass
 
+        # A game is completed when period_scores is present (any period text means
+        # swehockey added the result block) OR when the Game/Events link is in the
+        # score cell (swehockey places it there only for completed games).
         games.append(
             {
                 "season_id": season_id,
@@ -200,7 +205,7 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
                 "away_score": away_score,
                 "period_scores": period_scores,
                 "venue": venue,
-                "is_completed": home_score is not None and period_scores is not None,
+                "is_completed": home_score is not None and (period_scores is not None or game_id_in_score_cell),
             }
         )
 

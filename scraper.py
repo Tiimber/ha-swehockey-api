@@ -237,6 +237,7 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
         # Completed games have the link in the score cell; live/upcoming games
         # may have it in the game-names cell or anywhere in the row.
         game_id: Optional[int] = None
+        game_id_in_score_cell = False
         for ci in range(n):
             link = cells[ci].find("a")
             if link:
@@ -245,6 +246,7 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
                 m = re.search(r"Game/Events/(\d+)", href + onclick)
                 if m:
                     game_id = int(m.group(1))
+                    game_id_in_score_cell = (ci == score_cell_idx)
                     break
 
         # ── Score ──────────────────────────────────────────────────
@@ -271,12 +273,16 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
         except ValueError:
             pass
 
-        # A game is completed only when all 3 regulation periods have a score entry.
-        # During live play the schedule page shows partial period scores (e.g. "(2-1)"
-        # after P1, "(2-1, 0-1)" after P2) which would otherwise trigger a false match.
-        # We require ≥ 3 comma-separated entries (P1, P2, P3 all done).
+        # A game is completed when either:
+        #   (a) All 3 regulation periods have a score entry (≥ 3 comma-separated entries).
+        #       During live play the schedule page shows partial period scores, so we
+        #       require ≥ 3 entries to avoid a false positive.
+        #   (b) The Game/Events link appears in the score cell.  swehockey.se places the
+        #       link there only for completed games; for live/upcoming games it appears in
+        #       the team-names cell (or is absent).  This signal appears as soon as the
+        #       game ends, before the period scores text is always updated.
         period_entry_count = period_scores.count(",") + 1 if period_scores else 0
-        is_completed = home_score is not None and period_entry_count >= 3
+        is_completed = home_score is not None and (period_entry_count >= 3 or game_id_in_score_cell)
 
         games.append(
             {
