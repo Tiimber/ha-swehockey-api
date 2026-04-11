@@ -736,6 +736,7 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set ns_scan.home_flags = ns_scan.home_flags + [(hs > ns_scan.prev_hs)] -%}
                   {%- set ns_scan.prev_hs = hs -%}
                   {%- endfor -%}
+                  {%- set dur = [20, n_goals * 8] | max -%}
                   {%- set ns = namespace(segs=[]) -%}
                   {%- for g in goal_iter -%}
                   {%- if not loop.first -%}{%- set ns.segs = ns.segs + ['{"t":"   ","c":"FFFFFF"}'] -%}{%- endif -%}
@@ -757,13 +758,14 @@ _BUTTON_AUTOMATIONS = """\
                   {%- set ns.segs = ns.segs + ['{"t":"' ~ hs ~ '","c":"FFFFFF"}', '{"t":"-","c":"FFFFFF"}', '{"t":"' ~ as_ ~ ' ","c":"FFD700"}', '{"t":"' ~ sc ~ ' ' ~ per ~ ' ' ~ clk ~ sit_str ~ '","c":"FFFFFF"}'] -%}
                   {%- endif -%}
                   {%- endfor -%}
-                  {"text":[{{ ns.segs | join(',') }}],"duration":20,"stack":false}
+                  {"text":[{{ ns.segs | join(',') }}],"duration":{{ dur }},"stack":false}
             - service: input_number.set_value
               target:
                 entity_id: input_number.awtrix_goal_idx
               data:
                 value: 1
-            - delay: "00:00:20"
+            - delay:
+                seconds: "{{ [20, goals | length * 8] | max }}"
             - service: input_number.set_value
               target:
                 entity_id: input_number.awtrix_goal_idx
