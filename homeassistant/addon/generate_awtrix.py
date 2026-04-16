@@ -493,7 +493,7 @@ _T = """\
           {%- set sit = state_attr('sensor.hockeylive___SLUG___status','last_goal_situation') or 'ES' -%}
           {%- set score = state_attr('sensor.hockeylive___SLUG___status','score') -%}
           {%- set sitc = 'FFD700' if sit == 'PP' else '00AAFF' if sit == 'SH' else 'FFFFFF' -%}
-          {%- set own_goal = (team|lower|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('é','e')|replace('ü','u')|replace(' ','_')|replace('-','_')|replace('.','')) == '__SLUG__' -%}
+          {%- set own_goal = _ts(team) == '__OWNSLUG__' -%}
           {%- set rtttl = 'goal:d=8,o=5,b=100:c4,p2,d4' if own_goal else 'opp:d=4,o=3,b=100:c2' -%}
           {"draw":[__TEAMDRAW__],"text":[{"t":"     MAL! ","c":"FFD700"},{"t":"{{ sc }}","c":"FFFFFF"},{"t":" {{ score }}","c":"FFD700"}{% if ass %},{"t":" Ass: {{ ass|join(', ') }}","c":"888888"}{% endif %}{% if sit not in ['ES',''] %},{"t":" ({{ sit }})","c":"{{ sitc }}"}{% endif %}]__GOAL_SOUND_RTTTL__,"duration":30,"stack":false,"wakeup":true}
 
@@ -834,6 +834,7 @@ def main() -> None:
                 NAME=name,
                 WID=w["id"],
                 SLUG=slug,
+                OWNSLUG=_tslug(name),
                 TEAMDRAW=teamdraw,
                 AWTRIX_DRAW_HDR=awtrix_draw_hdr,
                 APP=f"hockey_{slug}",
@@ -873,6 +874,27 @@ def main() -> None:
     # Append global button automations (once per prefix, not per watch)
     automation_blocks.append(
         _sub(_BUTTON_AUTOMATIONS, PREFIX=prefix, AWTRIX_DRAW_HDR=awtrix_draw_hdr)
+    )
+
+    # TEMP TEST VIEW – icon 6881 to verify LED color rendering. Remove when done.
+    automation_blocks.append(
+        _sub(
+            """\
+- alias: "AWTRIX TEST - Ikon 6881 färgtest"
+  id: "awtrix_test_icon_6881"
+  trigger:
+    - platform: homeassistant
+      event: start
+    - platform: time_pattern
+      hours: "/1"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "__PREFIX__/custom/test_icon_6881"
+        payload: '{"icon":6881,"text":" Färgtest","duration":10,"lifetime":3600}'
+""",
+            PREFIX=prefix,
+        )
     )
 
     # Write as HA Package (works alongside any existing automation: !include setup)
