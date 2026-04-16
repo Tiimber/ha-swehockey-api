@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260411_10023
+ARG CACHEBUST=20260416_10024
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1016,8 +1016,8 @@ _TEAM_COLORS = {
     "malmo": ("#ffffff", "#bb0b2e", "#2a2a2a"),
     "modo_hockey": ("#cf1f2d", "#ffffff", "#2c5235"),
     "modo": ("#cf1f2d", "#ffffff", "#2c5235"),
-    "rogle_bk": ("#ffffff", "#067b35", "#a4272a"),
-    "rogle": ("#ffffff", "#067b35", "#a4272a"),
+    "rogle_bk": ("#ffffff", "#067b35", None),
+    "rogle": ("#ffffff", "#067b35", None),
     "skelleftea_aik": ("#fbba14", "#2a2a2a", None),
     "skelleftea": ("#fbba14", "#2a2a2a", None),
     "saik": ("#fbba14", "#2a2a2a", None),
@@ -1025,16 +1025,16 @@ _TEAM_COLORS = {
     "timra": ("#e32f25", "#ffffff", "#104999"),
     "orebro_hk": ("#e3032a", "#ffffff", None),
     "orebro": ("#e3032a", "#ffffff", None),
-    "vaxjo_lakers": ("#052f5d", "#eb7229", "#ffffff"),
-    "vaxjo": ("#052f5d", "#eb7229", "#ffffff"),
+    "vaxjo_lakers": ("#052f5d", "#eb7229", None),
+    "vaxjo": ("#052f5d", "#eb7229", None),
     # HockeyAllsvenskan
     "aik": ("#2a2a2a", "#FFD700", None),
     "almtuna_is": ("#CC0000", "#FFD700", "#ffffff"),
     "almtuna": ("#CC0000", "#FFD700", "#ffffff"),
     "bik_karlskoga": ("#0b2d74", "#ffffff", None),
     "karlskoga": ("#0b2d74", "#ffffff", None),
-    "if_bjorkloven": ("#0b5640", "#ffffff", "#fdd003"),
-    "bjorkloven": ("#0b5640", "#ffffff", "#fdd003"),
+    "if_bjorkloven": ("#0b5640", "#fdd003", None),
+    "bjorkloven": ("#0b5640", "#fdd003", None),
     "ik_oskarshamn": ("#0b2d74", "#c10230", "#ffffff"),
     "oskarshamn": ("#0b2d74", "#c10230", "#ffffff"),
     "karlskrona_hk": ("#003F7F", "#FFFFFF", None),
@@ -1792,24 +1792,24 @@ TEAM_COLORS = {
     "malmo":                ("#CC0000", "#000000", "#FFFFFF"),
     "modo_hockey":          ("#CC0000", "#FFFFFF", None),
     "modo":                 ("#CC0000", "#FFFFFF", None),
-    "rogle_bk":             ("#CC0000", "#FFFFFF", "#003F7F"),
-    "rogle":                ("#CC0000", "#FFFFFF", "#003F7F"),
+    "rogle_bk":             ("#ffffff", "#067b35", None),
+    "rogle":                ("#ffffff", "#067b35", None),
     "skelleftea_aik":       ("#FFD700", "#000000", None),
     "skelleftea":           ("#FFD700", "#000000", None),
     "timra_ik":             ("#CC0000", "#FFFFFF", "#000000"),
     "timra":                ("#CC0000", "#FFFFFF", "#000000"),
     "orebro_hk":            ("#001B50", "#FFFFFF", "#FFD700"),
     "orebro":               ("#001B50", "#FFFFFF", "#FFD700"),
-    "vaxjo_lakers":         ("#1E5E3D", "#FFFFFF", "#CC0000"),
-    "vaxjo":                ("#1E5E3D", "#FFFFFF", "#CC0000"),
+    "vaxjo_lakers":         ("#052f5d", "#eb7229", None),
+    "vaxjo":                ("#052f5d", "#eb7229", None),
     # HockeyAllsvenskan
     "aik":                  ("#000000", "#FFD700", None),
     "almtuna_is":           ("#CC0000", "#FFFFFF", None),
     "almtuna":              ("#CC0000", "#FFFFFF", None),
     "bik_karlskoga":        ("#003F7F", "#FFFFFF", None),
     "karlskoga":            ("#003F7F", "#FFFFFF", None),
-    "if_bjorkloven":        ("#006633", "#FFFFFF", None),
-    "bjorkloven":           ("#006633", "#FFFFFF", None),
+    "if_bjorkloven":        ("#0b5640", "#fdd003", None),
+    "bjorkloven":           ("#0b5640", "#fdd003", None),
     "ik_oskarshamn":        ("#003F7F", "#FFFFFF", "#CC0000"),
     "oskarshamn":           ("#003F7F", "#FFFFFF", "#CC0000"),
     "karlskrona_hk":        ("#003F7F", "#FFFFFF", None),

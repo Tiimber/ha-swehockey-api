@@ -56,8 +56,8 @@ TEAM_COLORS: dict[str, tuple[str, str, str | None]] = {
     "malmo": ("#CC0000", "#000000", "#FFFFFF"),
     "modo_hockey": ("#CC0000", "#FFFFFF", "#000000"),
     "modo": ("#CC0000", "#FFFFFF", "#000000"),
-    "rogle_bk": ("#CC0000", "#FFFFFF", "#003F7F"),
-    "rogle": ("#CC0000", "#FFFFFF", "#003F7F"),
+    "rogle_bk": ("#ffffff", "#067b35", None),
+    "rogle": ("#ffffff", "#067b35", None),
     "skelleftea_aik": ("#FFD700", "#000000", None),
     "skelleftea": ("#FFD700", "#000000", None),
     "saik": ("#FFD700", "#000000", None),
@@ -65,8 +65,8 @@ TEAM_COLORS: dict[str, tuple[str, str, str | None]] = {
     "timra": ("#CC0000", "#FFFFFF", "#000000"),
     "orebro_hk": ("#001B50", "#FFFFFF", "#FFD700"),
     "orebro": ("#001B50", "#FFFFFF", "#FFD700"),
-    "vaxjo_lakers": ("#1E5E3D", "#FFFFFF", "#CC0000"),
-    "vaxjo": ("#1E5E3D", "#FFFFFF", "#CC0000"),
+    "vaxjo_lakers": ("#052f5d", "#eb7229", None),
+    "vaxjo": ("#052f5d", "#eb7229", None),
     # ============================================================
     # HockeyAllsvenskan
     # ============================================================
@@ -75,8 +75,8 @@ TEAM_COLORS: dict[str, tuple[str, str, str | None]] = {
     "almtuna": ("#CC0000", "#FFFFFF", None),
     "bik_karlskoga": ("#003F7F", "#FFD700", None),
     "karlskoga": ("#003F7F", "#FFD700", None),
-    "if_bjorkloven": ("#006633", "#FFFFFF", None),
-    "bjorkloven": ("#006633", "#FFFFFF", None),
+    "if_bjorkloven": ("#0b5640", "#fdd003", None),
+    "bjorkloven": ("#0b5640", "#fdd003", None),
     "ik_oskarshamn": ("#003F7F", "#FFFFFF", "#CC0000"),
     "oskarshamn": ("#003F7F", "#FFFFFF", "#CC0000"),
     "karlskrona_hk": ("#003F7F", "#FFFFFF", None),
