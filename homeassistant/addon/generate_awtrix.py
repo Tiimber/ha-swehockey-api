@@ -208,8 +208,8 @@ _TEAM_COLORS = {
     "timra": ("#e32f25", "#ffffff", "#104999"),
     "orebro_hk": ("#e3032a", "#ffffff", None),
     "orebro": ("#e3032a", "#ffffff", None),
-    "vaxjo_lakers": ("#052f5d", "#FF6600", None),
-    "vaxjo": ("#052f5d", "#FF6600", None),
+    "vaxjo_lakers": ("#FF6600", "#052f5d", None),
+    "vaxjo": ("#FF6600", "#052f5d", None),
     # HockeyAllsvenskan
     "aik": ("#2a2a2a", "#FFD700", None),
     "almtuna_is": ("#CC0000", "#FFD700", "#ffffff"),

@@ -25,7 +25,7 @@ WORKDIR /app
 # CACHEBUST forces Docker to re-download source on every version bump.
 # IMPORTANT: ${CACHEBUST} must appear in the RUN command below for Docker
 # cache invalidation to actually trigger when the value changes.
-ARG CACHEBUST=20260416_10025
+ARG CACHEBUST=20260416_10026
 ARG REPO_URL=https://github.com/Tiimber/ha-swehockey-api/archive/refs/heads/master.tar.gz
 RUN echo "Cache bust: ${CACHEBUST}" \
     && echo "${CACHEBUST}" > /app/build_id \
@@ -1025,8 +1025,8 @@ _TEAM_COLORS = {
     "timra": ("#e32f25", "#ffffff", "#104999"),
     "orebro_hk": ("#e3032a", "#ffffff", None),
     "orebro": ("#e3032a", "#ffffff", None),
-    "vaxjo_lakers": ("#052f5d", "#FF6600", None),
-    "vaxjo": ("#052f5d", "#FF6600", None),
+    "vaxjo_lakers": ("#FF6600", "#052f5d", None),
+    "vaxjo": ("#FF6600", "#052f5d", None),
     # HockeyAllsvenskan
     "aik": ("#2a2a2a", "#FFD700", None),
     "almtuna_is": ("#CC0000", "#FFD700", "#ffffff"),
@@ -1800,8 +1800,8 @@ TEAM_COLORS = {
     "timra":                ("#CC0000", "#FFFFFF", "#000000"),
     "orebro_hk":            ("#001B50", "#FFFFFF", "#FFD700"),
     "orebro":               ("#001B50", "#FFFFFF", "#FFD700"),
-    "vaxjo_lakers":         ("#052f5d", "#eb7229", None),
-    "vaxjo":                ("#052f5d", "#eb7229", None),
+    "vaxjo_lakers":         ("#FF6600", "#052f5d", None),
+    "vaxjo":                ("#FF6600", "#052f5d", None),
     # HockeyAllsvenskan
     "aik":                  ("#000000", "#FFD700", None),
     "almtuna_is":           ("#CC0000", "#FFFFFF", None),

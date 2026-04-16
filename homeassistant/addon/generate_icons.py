@@ -65,8 +65,8 @@ TEAM_COLORS: dict[str, tuple[str, str, str | None]] = {
     "timra": ("#CC0000", "#FFFFFF", "#000000"),
     "orebro_hk": ("#001B50", "#FFFFFF", "#FFD700"),
     "orebro": ("#001B50", "#FFFFFF", "#FFD700"),
-    "vaxjo_lakers": ("#052f5d", "#FF6600", None),
-    "vaxjo": ("#052f5d", "#FF6600", None),
+    "vaxjo_lakers": ("#FF6600", "#052f5d", None),
+    "vaxjo": ("#FF6600", "#052f5d", None),
     # ============================================================
     # HockeyAllsvenskan
     # ============================================================
