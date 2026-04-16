@@ -329,7 +329,11 @@ def _jinja_awtrix_draw_header() -> str:
         "{{- n|lower"
         "|replace('\u00e5','a')|replace('\u00e4','a')|replace('\u00f6','o')"
         "|replace('\u00e9','e')|replace('\u00fc','u')"
-        "|replace(' ','_')|replace('-','_')|replace('.','') -}}"
+        "|replace(' ','_')|replace('-','_')|replace('.','_')"
+        "|replace('_hc','')|replace('_bk','')|replace('_ik','')"
+        "|replace('_hk','')|replace('_hf','')|replace('_if','')"
+        "|replace('_aik','')|replace('_fk','')"
+        "|replace('__','_')|replace('_','_')|trim('_') -}}"
         "{%- endmacro -%}"
     )
     fl = "{%- set _fl='" + fallback_l + "' -%}"
@@ -874,27 +878,6 @@ def main() -> None:
     # Append global button automations (once per prefix, not per watch)
     automation_blocks.append(
         _sub(_BUTTON_AUTOMATIONS, PREFIX=prefix, AWTRIX_DRAW_HDR=awtrix_draw_hdr)
-    )
-
-    # TEMP TEST VIEW – icon 6881 to verify LED color rendering. Remove when done.
-    automation_blocks.append(
-        _sub(
-            """\
-- alias: "AWTRIX TEST - Ikon 6881 färgtest"
-  id: "awtrix_test_icon_6881"
-  trigger:
-    - platform: homeassistant
-      event: start
-    - platform: time_pattern
-      hours: "/1"
-  action:
-    - service: mqtt.publish
-      data:
-        topic: "__PREFIX__/custom/test_icon_6881"
-        payload: '{"icon":6881,"text":" Färgtest","duration":10,"lifetime":3600}'
-""",
-            PREFIX=prefix,
-        )
     )
 
     # Write as HA Package (works alongside any existing automation: !include setup)
