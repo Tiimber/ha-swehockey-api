@@ -1,0 +1,83 @@
+# =============================================================================
+# 32x32 Matrix Hockey Scoreboard
+# =============================================================================
+# Renders a PNG scoreboard image from the HockeyLive API and pushes it to a
+# 32x32 LED matrix display added in Home Assistant.
+#
+# SETUP:
+#   YOUR_TEAM_SLUG   – team slug, e.g. demo / farjestad_bk / hv71
+#   YOUR_MATRIX_ENTITY – entity_id of your 32x32 display, e.g.:
+#                        light.matrix_display / select.matrix_image / etc.
+#                        (depends on your display integration)
+#   API_BASE_URL     – HockeyLive API, e.g. http://192.168.68.153:8080
+#
+# The PNG endpoint: GET {API_BASE_URL}/team/{team}/png
+# Returns a 32x32 image/png, no-cache headers.
+#
+# Add to configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages/
+# Then place this file in config/packages/matrix32_hockey.yaml
+# =============================================================================
+
+# ── Camera entity – polls the PNG endpoint ───────────────────────────────────
+# Add to configuration.yaml (camera: section) or use a package:
+#
+# camera:
+#   - platform: generic
+#     name: Hockey Scoreboard 32x32
+#     still_image_url: "http://192.168.68.153:8080/team/demo/png"
+#     verify_ssl: false
+#     scan_interval: 30
+
+# ── Automation: refresh on data change ───────────────────────────────────────
+automation:
+  - alias: "Matrix32 Hockey – Refresh scoreboard image"
+    id: matrix32_hockey_refresh
+    description: >
+      Forces the camera entity to re-fetch the PNG whenever the watched
+      team's live score, period, or status changes.
+
+    trigger:
+      # Score / period changes
+      - platform: state
+        entity_id: sensor.hockeylive_demo_live_score
+
+      - platform: state
+        entity_id: sensor.hockeylive_demo_period
+
+      # Status changes (live start/end, upcoming, etc.)
+      - platform: state
+        entity_id: binary_sensor.hockeylive_demo_game_live
+
+      # Periodic refresh every 30 s while live
+      - platform: time_pattern
+        seconds: "/30"
+
+    action:
+      # Force HA to re-fetch the camera still image
+      - service: homeassistant.update_entity
+        target:
+          entity_id: camera.hockey_scoreboard_32x32
+
+  - alias: "Matrix32 Hockey – Refresh when game goes live"
+    id: matrix32_hockey_live_start
+    description: Immediate refresh when game starts.
+
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.hockeylive_demo_game_live
+        to: "on"
+
+    action:
+      - service: homeassistant.update_entity
+        target:
+          entity_id: camera.hockey_scoreboard_32x32
+      # Rapid refresh for first 2 minutes of game
+      - repeat:
+          count: 8
+          sequence:
+            - delay: "00:00:15"
+            - service: homeassistant.update_entity
+              target:
+                entity_id: camera.hockey_scoreboard_32x32

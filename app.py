@@ -2339,3 +2339,77 @@ async def team_leagues(team: str):
     competitions = unique_competitions
 
     return {"team": team, "competitions": competitions}
+
+
+@app.get("/team/{team}/png")
+async def team_png(team: str):
+    """Render a 32x32 PNG scoreboard for the given team."""
+    from fastapi.responses import Response
+    from generate_png import render as _render_png
+
+    if team.lower() == "demo":
+        data = _demo_now()
+    else:
+        cfg = cfg_module.get()
+        season_ids = list(watchlist.get_season_ids_for_team(team))
+        if not season_ids:
+            cfg_team = cfg.get("team")
+            if cfg_team and team.lower() == cfg_team.lower():
+                season_ids = cfg.get("season_ids") or []
+        if not season_ids:
+            raise HTTPException(status_code=404, detail=f"Team '{team}' not watched.")
+        await _ensure_seasons_fresh(season_ids)
+        fake_cfg = {**cfg, "team": team}
+        games = _team_games(team, season_ids)
+        now = _now()
+        today = now.date()
+        PRE_GAME_WINDOW = 7200
+        today_games = [g for g in games if g["datetime"] and g["datetime"].date() == today]
+        today_as_current = [g for g in today_games if (g["datetime"] - now).total_seconds() <= PRE_GAME_WINDOW]
+        today_as_next = [g for g in today_games if (g["datetime"] - now).total_seconds() > PRE_GAME_WINDOW and not g["is_completed"]]
+        before_today = [g for g in games if g["datetime"] and g["datetime"].date() < today and g["is_completed"]]
+        after_today = [g for g in games if g["datetime"] and g["datetime"].date() > today and not g["is_completed"]]
+        previous_game = max(before_today, key=lambda g: g["datetime"]) if before_today else None
+        next_candidates = sorted(today_as_next + after_today, key=lambda g: g["datetime"])
+        next_game = next_candidates[0] if next_candidates else None
+
+        def _prev_dict(g):
+            d = _game_to_dict(g, fake_cfg)
+            return {"datetime": d["datetime_iso"], "home_team": d["home_team"], "away_team": d["away_team"],
+                    "home_score": d["home_score"], "away_score": d["away_score"],
+                    "score_for": d["score_for"], "score_against": d["score_against"],
+                    "won": d["won"], "overtime": bool(g.get("period_scores") and "OT" in (g["period_scores"] or "")),
+                    "shootout": bool(g.get("period_scores") and "SO" in (g["period_scores"] or ""))}
+
+        def _next_dict(g):
+            d = _game_to_dict(g, fake_cfg)
+            return {"datetime": d["datetime_iso"], "home_team": d["home_team"], "away_team": d["away_team"]}
+
+        current_data = None
+        if today_as_current:
+            tg = today_as_current[0]
+            base = _game_to_dict(tg, fake_cfg)
+            is_live_now = _is_live(tg)
+            is_done = tg["is_completed"]
+            won = None
+            if is_done and base["score_for"] is not None and base["score_against"] is not None:
+                won = base["score_for"] > base["score_against"]
+            current_data = {"datetime": base["datetime_iso"], "home_team": tg["home_team"], "away_team": tg["away_team"],
+                            "home_score": tg["home_score"], "away_score": tg["away_score"],
+                            "started": tg["datetime"] <= now, "is_live": is_live_now, "is_completed": is_done,
+                            "won": won, "period": None, "period_label": None, "period_clock": None,
+                            "is_overtime": False, "is_shootout": False, "goals": [], "last_goal": None}
+            if is_live_now:
+                detail = _live_detail(tg)
+                current_data.update({"home_score": detail["home_score"], "away_score": detail["away_score"],
+                                     "period": detail["period"], "period_label": detail["period_label"],
+                                     "period_clock": detail["period_clock"], "is_overtime": detail["is_overtime"],
+                                     "is_shootout": detail["is_shootout"], "goals": detail.get("goals", []),
+                                     "last_goal": detail.get("last_goal")})
+
+        data = {"team": team, "previous": _prev_dict(previous_game) if previous_game else None,
+                "current": current_data, "next": _next_dict(next_game) if next_game else None}
+
+    png_bytes = await asyncio.to_thread(_render_png, data, team)
+    return Response(content=png_bytes, media_type="image/png",
+                    headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
