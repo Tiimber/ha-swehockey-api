@@ -32,6 +32,7 @@ GET /team/{team}/schedule  Full schedule for a specific watched team
 import asyncio
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -1773,6 +1774,11 @@ async def team_leagues(team: str):
     if all_season_ids:
         await _ensure_seasons_fresh(all_season_ids)
 
+    _VIEW_SUFFIX = re.compile(r'\s*[–-]\s*(Games|Players|Teams|Schedule|Overview)\s*$', re.IGNORECASE)
+
+    def _clean_comp_name(name: str) -> str:
+        return _VIEW_SUFFIX.sub('', name).strip()
+
     team_lower = team.lower()
     competitions: list[dict] = []
     for lg in leagues_data:
@@ -1788,10 +1794,18 @@ async def team_leagues(team: str):
             )
             if count > 0:
                 competitions.append({
-                    "league": lg["league"],
-                    "name": sub["name"],
+                    "league": _clean_comp_name(lg["league"]),
+                    "name": _clean_comp_name(sub["name"]),
                     "season_id": sid,
                     "game_count": count,
                 })
+
+    seen_season_ids: set[int] = set()
+    unique_competitions = []
+    for comp in competitions:
+        if comp["season_id"] not in seen_season_ids:
+            seen_season_ids.add(comp["season_id"])
+            unique_competitions.append(comp)
+    competitions = unique_competitions
 
     return {"team": team, "competitions": competitions}
