@@ -325,10 +325,10 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
                 pass
 
     # ── Zone 4 rows 24-31: Period dots ───────────────────────────────────
-    # Parse period_scores string "(h-a, h-a, ...)" → [(h,a), ...]
+    # Parse period_scores string – handles "(h-a, h-a)" and "h-a,h-a,SO" formats
     pscores=None
-    if pscores_raw and pscores_raw.startswith("("):
-        parts=[p.strip().rstrip(")") for p in pscores_raw.strip("()").split(",")]
+    if pscores_raw:
+        parts=[p.strip().strip("()") for p in pscores_raw.strip("()").split(",")]
         parsed=[]
         for p in parts:
             if "-" in p:

@@ -1876,6 +1876,16 @@ def _demo_now() -> dict:
             if is_completed:
                 won = score_for > score_against
 
+            # Build period_scores for elapsed periods
+            _period_order = ["P1","P2","P3","OT","SO"]
+            _live_pscores_parts = []
+            for _pi in range(pidx):
+                _ph, _pa = _demo_score_at(g, _pi, _PERIOD_DUR.get(_pi, 1200))
+                _prev_ph = _demo_score_at(g, _pi-1, _PERIOD_DUR.get(_pi-1, 1200))[0] if _pi>0 else 0
+                _prev_pa = _demo_score_at(g, _pi-1, _PERIOD_DUR.get(_pi-1, 1200))[1] if _pi>0 else 0
+                _live_pscores_parts.append(f"{_ph-_prev_ph}-{_pa-_prev_pa}")
+            live_period_scores = ",".join(_live_pscores_parts) if _live_pscores_parts else None
+
             cur_dict = {
                 "datetime": game_dt_str,
                 "home_team": g["home"], "away_team": g["away"],
@@ -1888,6 +1898,7 @@ def _demo_now() -> dict:
                 "goals": goals, "last_goal": last_goal,
                 "penalties": all_pen, "active_penalties": active_pen,
                 "venue": g["venue"], "round": g["round"],
+                "period_scores": live_period_scores,
             }
 
     # --- advance simulated time for next call ---
