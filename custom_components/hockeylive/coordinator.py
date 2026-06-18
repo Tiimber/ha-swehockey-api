@@ -2,6 +2,7 @@
 from __future__ import annotations
 import logging
 from datetime import timedelta
+from urllib.parse import quote
 import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
@@ -29,7 +30,7 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict:
         session = async_get_clientsession(self.hass)
-        url = f"{self._api_url}/team/{self._team}/now"
+        url = f"{self._api_url}/team/{quote(self._team, safe='')}/now"
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status != 200:

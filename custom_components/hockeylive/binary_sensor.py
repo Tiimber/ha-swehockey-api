@@ -43,11 +43,14 @@ class HockeyIsLiveSensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_icon = "mdi:broadcast"
 
     @property
+    def available(self) -> bool:
+        return self.coordinator.data is not None
+
+    @property
     def is_on(self) -> bool:
-        return bool(
-            self.coordinator.data
-            and self.coordinator.data.get("current", {}).get("is_live", False)
-        )
+        if not self.coordinator.data:
+            return False
+        return bool(self.coordinator.data.get("current", {}).get("is_live", False))
 
     @property
     def extra_state_attributes(self) -> dict:

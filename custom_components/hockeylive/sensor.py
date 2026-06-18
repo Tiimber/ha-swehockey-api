@@ -54,6 +54,10 @@ class _HockeySensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{slug}_{key}"
         self._attr_has_entity_name = True
 
+    @property
+    def available(self) -> bool:
+        return self.coordinator.data is not None
+
 
 # ---------------------------------------------------------------------------
 # Next match

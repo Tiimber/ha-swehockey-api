@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -86,7 +87,7 @@ class HockeyLiveConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             session = async_get_clientsession(self.hass)
             try:
                 async with session.get(
-                    f"{self._api_url}/team/{self._team}/leagues"
+                    f"{self._api_url}/team/{quote(self._team, safe='')}/leagues"
                 ) as resp:
                     if resp.status != 200:
                         errors["base"] = "cannot_connect"
@@ -188,7 +189,7 @@ class HockeyLiveOptionsFlow(config_entries.OptionsFlow):
         if not self._competitions:
             session = async_get_clientsession(self.hass)
             try:
-                async with session.get(f"{api_url}/team/{team}/leagues") as resp:
+                async with session.get(f"{api_url}/team/{quote(team, safe='')}/leagues") as resp:
                     if resp.status == 200:
                         body = await resp.json()
                         self._competitions = body.get("competitions", [])
