@@ -56,7 +56,7 @@ class _HockeySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.data is not None
+        return self.coordinator.last_update_success and self.coordinator.data is not None
 
 
 # ---------------------------------------------------------------------------
@@ -70,11 +70,13 @@ class HockeyNextMatchSensor(_HockeySensor):
         self._attr_icon = "mdi:hockey-sticks"
 
     @property
-    def native_value(self) -> str:
-        game = self.coordinator.data.get("next") if self.coordinator.data else None
+    def native_value(self) -> str | None:
+        if not self.coordinator.data:
+            return None
+        game = self.coordinator.data.get("next")
         if not game:
-            return "–"
-        return game.get("datetime") or "–"
+            return None
+        return game.get("datetime") or None
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -102,14 +104,16 @@ class HockeyLastResultSensor(_HockeySensor):
         self._attr_icon = "mdi:scoreboard"
 
     @property
-    def native_value(self) -> str:
-        game = self.coordinator.data.get("previous") if self.coordinator.data else None
+    def native_value(self) -> str | None:
+        if not self.coordinator.data:
+            return None
+        game = self.coordinator.data.get("previous")
         if not game:
-            return "–"
+            return None
         sf = game.get("score_for")
         sa = game.get("score_against")
         if sf is None or sa is None:
-            return "–"
+            return None
         return f"{sf}–{sa}"
 
     @property
@@ -145,10 +149,12 @@ class HockeyLiveScoreSensor(_HockeySensor):
         self._attr_icon = "mdi:hockey-puck"
 
     @property
-    def native_value(self) -> str:
-        current = self.coordinator.data.get("current") if self.coordinator.data else None
+    def native_value(self) -> str | None:
+        if not self.coordinator.data:
+            return None
+        current = self.coordinator.data.get("current")
         if not current or not current.get("is_live"):
-            return "–"
+            return None
         h = current.get("home_score", 0)
         a = current.get("away_score", 0)
         return f"{h}–{a}"
@@ -186,8 +192,10 @@ class HockeyPeriodSensor(_HockeySensor):
         self._attr_icon = "mdi:timer-outline"
 
     @property
-    def native_value(self) -> str:
-        current = self.coordinator.data.get("current") if self.coordinator.data else None
+    def native_value(self) -> str | None:
+        if not self.coordinator.data:
+            return None
+        current = self.coordinator.data.get("current")
         if not current or not current.get("is_live"):
-            return "–"
-        return current.get("period_label") or "–"
+            return None
+        return current.get("period_label") or None
