@@ -424,6 +424,8 @@ async def _demo_refresh_loop() -> None:
             payload = _demo_status_payload()
             for watch_id, watch in watchlist.get_watches().items():
                 if watch.get("team", "").lower() == "demo":
+                    # Force-clear hash so publish_state always sends (sim_time changes every tick)
+                    _mqtt_pub._state_hashes.pop(watch_id, None)
                     _mqtt_pub.publish_state(watch_id, payload)
         except Exception as exc:
             logger.debug("Demo MQTT loop error: %s", exc)
