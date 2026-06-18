@@ -264,14 +264,20 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
                 if 0<=(now_utc-gdt).total_seconds()<=60: score_col=_YELLOW
         except Exception: pass
 
-    # ── Zone 1 rows 0-7: Home strip ──────────────────────────────────────
-    _strip(px,0,8,W,hp,hs_c,ha)
-    _txt(px,habbr,1,0,_WHITE,W,H)
+    # ── Zone 1 rows 0-7: Home team name in alternating team colors ────────
+    home_palette=[hp,hs_c]+([ha] if ha else [])
+    x=1
+    for i,c in enumerate(habbr):
+        col=home_palette[i%len(home_palette)]
+        _ch(px,c,x,0,col,W,H); x+=6
     _txtr(px,str(hs),W-1,0,score_col,W,H)
 
-    # ── Zone 2 rows 8-15: Away strip ─────────────────────────────────────
-    _strip(px,8,8,W,ap,as_c,aa)
-    _txt(px,aabbr,1,8,_WHITE,W,H)
+    # ── Zone 2 rows 8-15: Away team name in alternating team colors ───────
+    away_palette=[ap,as_c]+([aa] if aa else [])
+    x=1
+    for i,c in enumerate(aabbr):
+        col=away_palette[i%len(away_palette)]
+        _ch(px,c,x,8,col,W,H); x+=6
     _txtr(px,str(as_),W-1,8,score_col,W,H)
 
     # ── Zone 3 rows 16-23: Clock / info ──────────────────────────────────
