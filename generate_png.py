@@ -282,21 +282,19 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
 
     # ── Zone 3 rows 16-23: Clock / info ──────────────────────────────────
     if live and clock:
-        # Show "P2 14:32" style
-        info=f"{plabel} {clock}".strip() if plabel else clock
-        _txtc(px,info,17,_WHITE,W,H)
+        _txtc(px,clock,19,_WHITE,W,H)
     elif live and plabel:
-        _txtc(px,plabel,17,_WHITE,W,H)
+        pass
     elif done and (ot or so):
         suffix="SO" if so else "OT"
-        _txtc(px,suffix,17,_GOLD,W,H)
+        _txtc(px,suffix,19,_GOLD,W,H)
     elif cur and not live and not done:
         # Upcoming today – show time
         dt_str=cur.get("datetime") or ""
         if dt_str:
             try:
                 dt=datetime.fromisoformat(dt_str)
-                _txtc(px,dt.strftime("%H:%M"),17,_GREY,W,H)
+                _txtc(px,dt.strftime("%H:%M"),19,_GREY,W,H)
             except Exception:
                 pass
     elif nxt:
@@ -304,14 +302,14 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
         if dt_str:
             try:
                 dt=datetime.fromisoformat(dt_str)
-                _txtc(px,dt.strftime("%d/%m"),17,_GREY,W,H)
+                _txtc(px,dt.strftime("%d/%m"),19,_GREY,W,H)
             except Exception:
                 pass
 
     # ── Zone 4 rows 24-31: Period dots ───────────────────────────────────
-    # 5 dots at x positions: 3, 9, 15, 21, 27  (cy=27)
+    # 5 dots at x positions: 3, 9, 15, 21, 27  (cy=29)
     dot_cols=_dot_colors(plabel,live,done,won,ot,so,None)
     for i,dc in enumerate(dot_cols):
-        _dot(px,3+i*6,27,dc,W,H)
+        _dot(px,3+i*6,29,dc,W,H)
 
     buf=io.BytesIO(); img.save(buf,"PNG"); return buf.getvalue()
