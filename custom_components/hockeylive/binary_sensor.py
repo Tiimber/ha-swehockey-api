@@ -44,13 +44,13 @@ class HockeyIsLiveSensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self.coordinator.data is not None
+        return self.coordinator.data is not None
 
     @property
     def is_on(self) -> bool | None:
         if not self.coordinator.data:
             return None
-        return bool(self.coordinator.data.get("current", {}).get("is_live", False))
+        return bool((self.coordinator.data.get("current") or {}).get("is_live", False))
 
     @property
     def extra_state_attributes(self) -> dict:
