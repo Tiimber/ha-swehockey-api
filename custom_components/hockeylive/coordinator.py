@@ -41,11 +41,15 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         except Exception as exc:
             raise UpdateFailed(f"Failed to reach API at {url}: {exc}") from exc
 
+        # Demo team always polls at live rate (simulation advances every call)
+        if self._team.lower() == "demo":
+            self.update_interval = timedelta(seconds=UPDATE_INTERVAL_LIVE)
+            return data
+
         current = data.get("current") or {}
         if current.get("is_live"):
             self.update_interval = timedelta(seconds=UPDATE_INTERVAL_LIVE)
         elif current:
-            # pregame or completed-today: poll at game-day rate
             self.update_interval = timedelta(seconds=UPDATE_INTERVAL_GAME_DAY)
         elif data.get("next") or data.get("previous"):
             self.update_interval = timedelta(seconds=UPDATE_INTERVAL_GAME_DAY)
