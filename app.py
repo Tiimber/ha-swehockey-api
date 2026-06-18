@@ -71,7 +71,23 @@ STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 # ---------------------------------------------------------------------------
 
 _schedule_cache: dict[int, dict] = {}
-_demo_cycle: int = 0
+
+# ---------------------------------------------------------------------------
+# Demo simulation state
+# ---------------------------------------------------------------------------
+# sim_minutes: float minutes since Monday 00:00 (0 = Mon 00:00, 10080 = next Mon)
+# game_clock_seconds: seconds elapsed in current period (None when not in-game)
+# period_index: 0=P1,1=P2,2=P3,3=OT,4=SO
+# in_period_break: True when between periods
+# game_index: which game is "current" (0,1,2) or None
+_demo_state: dict = {
+    "sim_minutes": 0.0,
+    "game_clock_seconds": None,
+    "period_index": 0,
+    "in_period_break": False,
+    "game_index": None,
+    "rng_seed": 42,
+}
 
 # Cache of goals for matches that finished today, keyed by game_id.
 # Populated on first request after the game ends; survives across polls.
@@ -1436,146 +1452,467 @@ async def team_schedule(team: str):
     }
 
 
-@app.get("/team/{team}/now")
-async def team_now(team: str):
-    """Previous / current / next summary for any watched team."""
-    global _demo_cycle
+# ---------------------------------------------------------------------------
+# Demo simulation engine
+# ---------------------------------------------------------------------------
+import random as _random
 
-    # --- demo intercept ---
-    if team.lower() == "demo":
-        _demo_cycle = (_demo_cycle + 1) % 20
-        step = _demo_cycle
-        now_iso = _now().isoformat()
+# Week layout (minutes from Mon 00:00):
+#   Game 0: Mon 19:00 = 1140 min  Home vs Team 1 (T1)  → Demo loses 1-4
+#   Game 1: Thu 19:00 = 4380 min  Away vs Team 2 (T2)  → Demo wins 5-3 (many goals)
+#   Game 2: Sun 15:15 = 9255 min  Home vs Team 3 (T3)  → Shootout win
 
-        _demo_prev = {
-            "datetime": "2026-06-10T19:00:00+02:00",
-            "home_team": "Demo FC",
-            "away_team": "Test IK",
-            "home_score": 3,
-            "away_score": 2,
-            "score_for": 3,
-            "score_against": 2,
-            "won": True,
-            "overtime": False,
-            "shootout": False,
-            "venue": "Demo Arena",
-            "round": "Round 30",
-            "period_scores": "2-1,1-1",
-        }
-        _demo_next = {
-            "datetime": "2026-06-25T19:00:00+02:00",
-            "home_team": "Demo FC",
-            "away_team": "Test IK",
-            "is_home": True,
-            "opponent": "Test IK",
-            "venue": "Demo Arena",
-            "round": "Round 32",
-        }
-        _fake_goals = [
-            {"time": "08:23", "period": "P1", "scorer": "A. Player", "team": "Demo FC", "score": "1-0"},
-            {"time": "34:11", "period": "P2", "scorer": "B. Scorer", "team": "Test IK", "score": "1-1"},
-        ]
-        _fake_penalty = {"player": "C. Rough", "team": "Test IK", "minutes": 2, "type": "Roughing", "time": "25:44"}
+_DEMO_WEEK_MINUTES = 7 * 24 * 60  # 10080
 
-        if step <= 1:
-            cur = {
-                "datetime": "2026-06-18T19:00:00+02:00",
-                "home_team": "Demo FC", "away_team": "Test IK",
+_DEMO_GAMES = [
+    {
+        "idx": 0, "start_min": 1140, "is_home": True,
+        "home": "Demo FC", "away": "Team 1", "home_short": "DFC", "away_short": "T1",
+        "venue": "Demo Arena", "round": "Round 31",
+        "outcome": "loss",
+        # goals: list of (abs_game_second, period, scorer, team, h_score, a_score)
+        "goals": [
+            (480,  "P1", "E. Opponent", "Team 1", 0, 1),
+            (820,  "P1", "F. Rival",    "Team 1", 0, 2),
+            (1250, "P2", "A. Demo",     "Demo FC", 1, 2),
+            (2800, "P3", "G. Foe",      "Team 1", 1, 3),
+            (3200, "P3", "H. Enemy",    "Team 1", 1, 4),
+        ],
+        "penalties": [
+            (600,  "B. Rough", "Demo FC", 2, "Roughing"),
+            (2100, "C. Slash", "Team 1",  2, "Slashing"),
+        ],
+        "final_h": 1, "final_a": 4,
+        "overtime": False, "shootout": False,
+        "period_scores": "0-2,1-0,0-2",
+    },
+    {
+        "idx": 1, "start_min": 4380, "is_home": False,
+        "home": "Team 2", "away": "Demo FC", "home_short": "T2", "away_short": "DFC",
+        "venue": "Away Arena", "round": "Round 32",
+        "outcome": "win",
+        "goals": [
+            (310,  "P1", "A. Demo",     "Demo FC", 0, 1),
+            (750,  "P1", "X. Home",     "Team 2",  1, 1),
+            (1100, "P2", "B. Demo",     "Demo FC", 1, 2),
+            (1450, "P2", "Y. Home",     "Team 2",  2, 2),
+            (1700, "P2", "C. Demo",     "Demo FC", 2, 3),
+            (2200, "P3", "Z. Home",     "Team 2",  3, 3),
+            (2600, "P3", "D. Demo",     "Demo FC", 3, 4),
+            (3100, "P3", "E. Demo",     "Demo FC", 3, 5),
+        ],
+        "penalties": [
+            (900,  "P. Push",  "Team 2",  2, "Pushing"),
+            (1900, "Q. Hook",  "Demo FC", 2, "Hooking"),
+        ],
+        "final_h": 3, "final_a": 5,
+        "outcome_for_demo": "win",
+        "overtime": False, "shootout": False,
+        "period_scores": "1-1,2-2,0-2",
+    },
+    {
+        "idx": 2, "start_min": 9255, "is_home": True,
+        "home": "Demo FC", "away": "Team 3", "home_short": "DFC", "away_short": "T3",
+        "venue": "Demo Arena", "round": "Round 33",
+        "outcome": "shootout_win",
+        "goals": [
+            (600,  "P1", "A. Demo",     "Demo FC", 1, 0),
+            (1500, "P2", "V. Opp",      "Team 3",  1, 1),
+            (2400, "P3", "B. Demo",     "Demo FC", 2, 1),
+            (3200, "P3", "W. Opp",      "Team 3",  2, 2),
+            # OT goal: none (goes to SO)
+        ],
+        "penalties": [
+            (800,  "R. Trip", "Team 3",  2, "Tripping"),
+            (2900, "S. Elbow","Demo FC", 2, "Elbowing"),
+        ],
+        "final_h": 2, "final_a": 2,
+        "ot_goals": [],
+        "so_winner": "Demo FC",
+        "overtime": True, "shootout": True,
+        "period_scores": "1-0,0-1,1-1,0-0,SO",
+    },
+]
+
+# Period durations in seconds
+_PERIOD_DUR = {0: 1200, 1: 1200, 2: 1200, 3: 600, 4: 0}  # P1,P2,P3,OT,SO
+_PERIOD_LABELS = {0: ("P1", "Period 1"), 1: ("P2", "Period 2"), 2: ("P3", "Period 3"), 3: ("OT", "Overtime"), 4: ("SO", "Shootout")}
+
+
+def _demo_fmt_clock(secs: float) -> str:
+    m = int(secs) // 60
+    s = int(secs) % 60
+    return f"{m:02d}:{s:02d}"
+
+
+def _demo_goals_at(game: dict, period_idx: int, clock_secs: float) -> list:
+    """Return all goals that have occurred up to this point in the game."""
+    period_key = _PERIOD_LABELS[period_idx][0]
+    period_order = ["P1", "P2", "P3", "OT", "SO"]
+    current_period_order = period_order.index(period_key) if period_key in period_order else 0
+    goals = []
+    for (abs_sec, period, scorer, team, h, a) in game["goals"]:
+        goal_period_order = period_order.index(period) if period in period_order else 0
+        if goal_period_order < current_period_order:
+            goals.append({"time": _demo_fmt_clock(abs_sec % 1200), "period": period, "scorer": scorer, "team": team, "score": f"{h}-{a}"})
+        elif goal_period_order == current_period_order:
+            goal_clock = abs_sec - goal_period_order * 1200
+            if goal_clock <= clock_secs:
+                goals.append({"time": _demo_fmt_clock(goal_clock), "period": period, "scorer": scorer, "team": team, "score": f"{h}-{a}"})
+    return goals
+
+
+def _demo_score_at(game: dict, period_idx: int, clock_secs: float) -> tuple:
+    """Return (home_score, away_score) at current game time."""
+    goals = _demo_goals_at(game, period_idx, clock_secs)
+    if not goals:
+        return 0, 0
+    last = goals[-1]
+    parts = last["score"].split("-")
+    return int(parts[0]), int(parts[1])
+
+
+def _demo_penalties_at(game: dict, period_idx: int, clock_secs: float) -> tuple:
+    """Return active penalties (within 2 min window)."""
+    period_key = _PERIOD_LABELS[period_idx][0]
+    period_order = ["P1", "P2", "P3", "OT", "SO"]
+    current_period_order = period_order.index(period_key) if period_key in period_order else 0
+    abs_clock = current_period_order * 1200 + clock_secs
+    active = []
+    all_pen = []
+    for (pen_abs, player, pen_team, mins, ptype) in game["penalties"]:
+        all_pen.append({"player": player, "team": pen_team, "minutes": mins, "type": ptype,
+                        "time": _demo_fmt_clock(pen_abs % 1200)})
+        if pen_abs <= abs_clock <= pen_abs + mins * 60:
+            active.append({"player": player, "team": pen_team, "minutes": mins, "type": ptype,
+                           "time": _demo_fmt_clock(pen_abs % 1200)})
+    return all_pen, active
+
+
+def _demo_game_to_prev(game: dict, demo_team: str = "Demo FC") -> dict:
+    """Build a 'previous' dict from a completed game definition."""
+    is_home = game["is_home"]
+    h, a = game["final_h"], game["final_a"]
+    # For shootout games, the SO winner gets the extra point in display
+    if game.get("shootout") and game.get("so_winner"):
+        if game["so_winner"] == game["home"]:
+            h += 1
+        else:
+            a += 1
+    score_for = h if is_home else a
+    score_against = a if is_home else h
+    won = score_for > score_against
+    return {
+        "datetime": None,  # filled by caller
+        "home_team": game["home"],
+        "away_team": game["away"],
+        "home_score": h,
+        "away_score": a,
+        "score_for": score_for,
+        "score_against": score_against,
+        "won": won,
+        "overtime": game.get("overtime", False),
+        "shootout": game.get("shootout", False),
+        "venue": game["venue"],
+        "round": game["round"],
+        "period_scores": game.get("period_scores"),
+    }
+
+
+def _demo_game_to_next(game: dict) -> dict:
+    """Build a 'next' dict from an upcoming game definition."""
+    return {
+        "datetime": None,  # filled by caller
+        "home_team": game["home"],
+        "away_team": game["away"],
+        "is_home": game["is_home"],
+        "opponent": game["away"] if game["is_home"] else game["home"],
+        "venue": game["venue"],
+        "round": game["round"],
+    }
+
+
+def _demo_now() -> dict:
+    """Advance simulated time and return the demo team_now payload."""
+    global _demo_state
+
+    st = _demo_state
+    rng = _random.Random(int(st["sim_minutes"] * 1000))
+
+    # --- determine which game is "active" based on sim_minutes ---
+    sim = st["sim_minutes"]
+    now_iso = _now().isoformat()
+
+    # If game_completed is set but sim is before the completed game's start, we've wrapped
+    gidx = st.get("game_index")
+    if st.get("game_completed") and gidx is not None:
+        completed_game = _DEMO_GAMES[gidx]
+        if sim < completed_game["start_min"]:
+            # Wrapped around — reset game state
+            st["game_completed"] = False
+            st["game_index"] = None
+            st["period_index"] = 0
+            st["game_clock_seconds"] = None
+            st["in_period_break"] = False
+
+    # Find previous/current/next game relative to sim time
+    WEEK = _DEMO_WEEK_MINUTES
+    PRE_GAME_WINDOW_MIN = 120  # 2 hours before = pregame
+
+    def _game_dt_str(game: dict) -> str:
+        # Fake ISO datetime anchored to a Monday (2026-06-22 = Monday)
+        base_day = {0: "2026-06-22", 1: "2026-06-25", 2: "2026-06-29"}
+        day_str = base_day[game["idx"]]
+        start_min = game["start_min"]
+        h = (start_min % (24 * 60)) // 60
+        m = start_min % 60
+        return f"{day_str}T{h:02d}:{m:02d}:00+02:00"
+
+    # Determine game states
+    prev_game = None
+    cur_game = None
+    next_game = None
+    cur_game_phase = "idle"
+
+    for g in _DEMO_GAMES:
+        gstart = g["start_min"]
+        # Approximate game duration: 3 periods * 20min + breaks = ~75min, OT+SO adds ~20min
+        gdur = 75 if not g.get("overtime") else 95
+        gend = gstart + gdur
+
+        if sim < gstart - PRE_GAME_WINDOW_MIN:
+            # Before pregame window
+            if next_game is None:
+                next_game = g
+        elif sim < gstart:
+            # In pregame window
+            cur_game = g
+            cur_game_phase = "pregame"
+        elif sim < gend:
+            # During game
+            cur_game = g
+            cur_game_phase = "live"
+        else:
+            # After game
+            prev_game = g
+
+    # If we've passed all games (sim > last game end), wrap: prev=game2, next=game0 (next week)
+    if prev_game is None and cur_game is None and next_game is None:
+        prev_game = _DEMO_GAMES[2]
+        next_game = _DEMO_GAMES[0]
+
+    # Build prev dict
+    prev_dict = None
+    if prev_game:
+        pd = _demo_game_to_prev(prev_game)
+        pd["datetime"] = _game_dt_str(prev_game)
+        prev_dict = pd
+
+    # Build next dict
+    next_dict = None
+    if next_game and cur_game is None:
+        nd = _demo_game_to_next(next_game)
+        nd["datetime"] = _game_dt_str(next_game)
+        next_dict = nd
+
+    # Build current dict
+    cur_dict = None
+    if cur_game is not None:
+        g = cur_game
+        gstart = g["start_min"]
+        gdur = 75 if not g.get("overtime") else 95
+        gend = gstart + gdur
+        game_dt_str = _game_dt_str(g)
+
+        if cur_game_phase == "pregame":
+            cur_dict = {
+                "datetime": game_dt_str,
+                "home_team": g["home"], "away_team": g["away"],
                 "started": False, "is_live": False, "is_completed": False,
                 "home_score": None, "away_score": None,
                 "score_for": None, "score_against": None, "won": None,
                 "period": None, "period_label": None, "period_clock": None,
                 "is_overtime": False, "is_shootout": False,
                 "goals": [], "last_goal": None, "penalties": [], "active_penalties": [],
-                "venue": "Demo Arena", "round": "Round 31",
+                "venue": g["venue"], "round": g["round"],
             }
-            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+        else:
+            # live: figure out period and clock from game_clock_seconds
+            gc = st.get("game_clock_seconds") or 0.0
+            pidx = st.get("period_index") or 0
+            in_break = st.get("in_period_break") or False
 
-        if step <= 5:
-            hs = [0, 0, 1, 1, 2][min(step - 2, 3)]
-            cur = {
-                "datetime": "2026-06-18T19:00:00+02:00",
-                "home_team": "Demo FC", "away_team": "Test IK",
-                "started": True, "is_live": True, "is_completed": False,
-                "home_score": hs, "away_score": 0,
-                "score_for": hs, "score_against": 0, "won": None,
-                "period": "P1", "period_label": "Period 1",
-                "period_clock": f"{(step - 2) * 5:02d}:00",
-                "is_overtime": False, "is_shootout": False,
-                "goals": _fake_goals[:hs], "last_goal": _fake_goals[hs - 1] if hs else None,
-                "penalties": [], "active_penalties": [],
-                "venue": "Demo Arena", "round": "Round 31",
+            # Determine scores
+            if g.get("shootout") and pidx == 4:
+                # Shootout: show final SO result
+                h_score, a_score = g["final_h"], g["final_a"]
+                # SO winner gets +1 in display
+                if g["so_winner"] == g["home"]:
+                    h_score = g["final_h"] + 1
+                else:
+                    a_score = g["final_a"] + 1
+                goals = _demo_goals_at(g, 3, 600)  # all OT goals
+            else:
+                h_score, a_score = _demo_score_at(g, pidx, gc)
+                goals = _demo_goals_at(g, pidx, gc)
+
+            all_pen, active_pen = _demo_penalties_at(g, pidx, gc)
+            last_goal = goals[-1] if goals else None
+
+            period_key, period_label = _PERIOD_LABELS.get(pidx, ("P1", "Period 1"))
+            is_ot = pidx == 3
+            is_so = pidx == 4
+
+            is_completed = st.get("game_completed") or False
+            is_live = not is_completed and not in_break
+
+            if in_break:
+                period_clock = None
+                period_label = f"Break after {period_label}"
+            elif is_so:
+                period_clock = None
+            else:
+                period_clock = _demo_fmt_clock(gc)
+
+            is_home = g["is_home"]
+            score_for = h_score if is_home else a_score
+            score_against = a_score if is_home else h_score
+            won = None
+            if is_completed:
+                won = score_for > score_against
+
+            cur_dict = {
+                "datetime": game_dt_str,
+                "home_team": g["home"], "away_team": g["away"],
+                "started": True, "is_live": is_live, "is_completed": is_completed,
+                "home_score": h_score, "away_score": a_score,
+                "score_for": score_for, "score_against": score_against, "won": won,
+                "period": period_key, "period_label": period_label,
+                "period_clock": period_clock,
+                "is_overtime": is_ot, "is_shootout": is_so,
+                "goals": goals, "last_goal": last_goal,
+                "penalties": all_pen, "active_penalties": active_pen,
+                "venue": g["venue"], "round": g["round"],
             }
-            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
 
-        if step <= 9:
-            as_ = [1, 1, 2, 2][step - 6]
-            cur = {
-                "datetime": "2026-06-18T19:00:00+02:00",
-                "home_team": "Demo FC", "away_team": "Test IK",
-                "started": True, "is_live": True, "is_completed": False,
-                "home_score": 2, "away_score": as_,
-                "score_for": 2, "score_against": as_, "won": None,
-                "period": "P2", "period_label": "Period 2",
-                "period_clock": f"{(step - 6) * 5:02d}:00",
-                "is_overtime": False, "is_shootout": False,
-                "goals": _fake_goals, "last_goal": _fake_goals[-1],
-                "penalties": [_fake_penalty], "active_penalties": [_fake_penalty],
-                "venue": "Demo Arena", "round": "Round 31",
-            }
-            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+    # --- advance simulated time for next call ---
+    _demo_advance_time(rng)
 
-        if step <= 13:
-            hs3 = [2, 3, 3, 3][step - 10]
-            cur = {
-                "datetime": "2026-06-18T19:00:00+02:00",
-                "home_team": "Demo FC", "away_team": "Test IK",
-                "started": True, "is_live": True, "is_completed": False,
-                "home_score": hs3, "away_score": 2,
-                "score_for": hs3, "score_against": 2, "won": None,
-                "period": "P3", "period_label": "Period 3",
-                "period_clock": f"{(step - 10) * 5:02d}:00",
-                "is_overtime": False, "is_shootout": False,
-                "goals": _fake_goals, "last_goal": _fake_goals[-1],
-                "penalties": [], "active_penalties": [],
-                "venue": "Demo Arena", "round": "Round 31",
-            }
-            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+    return {"team": "demo", "updated_at": now_iso, "previous": prev_dict, "current": cur_dict, "next": next_dict}
 
-        if step <= 15:
-            cur = {
-                "datetime": "2026-06-18T19:00:00+02:00",
-                "home_team": "Demo FC", "away_team": "Test IK",
-                "started": True, "is_live": True, "is_completed": False,
-                "home_score": 3, "away_score": 2,
-                "score_for": 3, "score_against": 2, "won": None,
-                "period": "OT", "period_label": "Overtime",
-                "period_clock": f"{(step - 14) * 2:02d}:00",
-                "is_overtime": True, "is_shootout": False,
-                "goals": _fake_goals, "last_goal": _fake_goals[-1],
-                "penalties": [], "active_penalties": [],
-                "venue": "Demo Arena", "round": "Round 31",
-            }
-            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
 
-        if step <= 17:
-            cur = {
-                "datetime": "2026-06-18T19:00:00+02:00",
-                "home_team": "Demo FC", "away_team": "Test IK",
-                "started": True, "is_live": False, "is_completed": True,
-                "home_score": 4, "away_score": 2,
-                "score_for": 4, "score_against": 2, "won": True,
-                "period": "OT", "period_label": "Overtime",
-                "period_clock": None,
-                "is_overtime": True, "is_shootout": False,
-                "goals": _fake_goals, "last_goal": _fake_goals[-1],
-                "penalties": [], "active_penalties": [],
-                "venue": "Demo Arena", "round": "Round 31",
-            }
-            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+def _demo_advance_time(rng: "_random.Random") -> None:
+    """Mutate _demo_state to advance simulated time by one tick."""
+    global _demo_state
+    st = _demo_state
+    sim = st["sim_minutes"]
+    WEEK = _DEMO_WEEK_MINUTES
 
-        # steps 18-19: pre-game for next match
-        return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": None, "next": _demo_next}
+    PRE_GAME_WINDOW_MIN = 120
+
+    # Find which game we're in/near
+    active_game = None
+    phase = "idle"
+    for g in _DEMO_GAMES:
+        gstart = g["start_min"]
+        gdur = 75 if not g.get("overtime") else 95
+        gend = gstart + gdur
+        if gstart - PRE_GAME_WINDOW_MIN <= sim < gstart:
+            active_game = g
+            phase = "pregame"
+            break
+        if gstart <= sim < gend:
+            active_game = g
+            phase = "live"
+            break
+
+    if phase == "idle":
+        # Check if we're close to a pregame window
+        for g in _DEMO_GAMES:
+            gstart = g["start_min"]
+            if sim < gstart - PRE_GAME_WINDOW_MIN:
+                # How far to pregame?
+                dist = gstart - PRE_GAME_WINDOW_MIN - sim
+                if dist <= 120:
+                    # Within 2h of pregame start: advance 15 min
+                    st["sim_minutes"] = (sim + 15) % WEEK
+                else:
+                    st["sim_minutes"] = (sim + 120) % WEEK
+                return
+        # Past all games this week
+        st["sim_minutes"] = (sim + 120) % WEEK
+        return
+
+    if phase == "pregame":
+        gstart = active_game["start_min"]
+        dist_to_start = gstart - sim
+        if dist_to_start > 120:
+            st["sim_minutes"] = sim + 120
+        else:
+            st["sim_minutes"] = sim + 15
+        # Reset game clock when we hit game start
+        if st["sim_minutes"] >= gstart:
+            st["sim_minutes"] = float(gstart)
+            st["game_clock_seconds"] = 0.0
+            st["period_index"] = 0
+            st["in_period_break"] = False
+            st["game_completed"] = False
+            st["game_index"] = active_game["idx"]
+        return
+
+    if phase == "live":
+        g = active_game
+        pidx = st.get("period_index") or 0
+        gc = st.get("game_clock_seconds") or 0.0
+        in_break = st.get("in_period_break") or False
+        completed = st.get("game_completed") or False
+
+        if completed:
+            # Game done, advance wall time
+            st["sim_minutes"] = (sim + 120) % WEEK
+            return
+
+        if in_break:
+            # One tick in break, then start next period
+            st["in_period_break"] = False
+            st["game_clock_seconds"] = 0.0
+            return
+
+        # Advance game clock by random 5-10 minutes
+        chunk = rng.uniform(5 * 60, 10 * 60)
+        period_dur = _PERIOD_DUR.get(pidx, 1200)
+
+        if pidx == 4:
+            # Shootout: one tick then complete
+            st["game_completed"] = True
+            st["sim_minutes"] = sim + 2  # small wall advance
+            return
+
+        new_gc = gc + chunk
+        if new_gc >= period_dur:
+            # Period ended
+            max_period = 4 if g.get("shootout") else (3 if g.get("overtime") else 2)
+            if pidx >= max_period:
+                # Game over
+                st["game_clock_seconds"] = float(period_dur)
+                st["game_completed"] = True
+                st["sim_minutes"] = sim + 2
+            else:
+                # Enter break
+                st["game_clock_seconds"] = float(period_dur)
+                st["in_period_break"] = True
+                st["period_index"] = pidx + 1
+        else:
+            st["game_clock_seconds"] = new_gc
+            st["sim_minutes"] = sim + chunk / 60  # keep wall time in sync
+
+
+@app.get("/team/{team}/now")
+async def team_now(team: str):
+    """Previous / current / next summary for any watched team."""
+    # --- demo intercept ---
+    if team.lower() == "demo":
+        return _demo_now()
 
     # --- real logic ---
     cfg = cfg_module.get()
