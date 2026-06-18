@@ -1,0 +1,33 @@
+# HockeyLive API – Swehockey
+
+## Project
+- FastAPI Python app scraping `stats.swehockey.se`; runs on port 8080
+- Stack: Python + pip (no Yarn/Node). No test/lint scripts in package.json.
+- Runtime: `docker compose up -d --build` (root `Dockerfile` + `docker-compose.yml`)
+- Config: `config.yaml` (team + season_ids); env var `HOCKEY_CONFIG` overrides path
+- Watchlist persisted in `watchlist.json` (bind-mounted volume in Docker)
+
+## Key Files
+- `app.py` – FastAPI routes (1284 lines — use grep/line-reads, never ingest whole file)
+- `scraper.py`, `config.py`, `watchlist.py` – core modules
+- `scripts/build_addon.sh` – assembles HA local add-on into `/tmp/hockeylive-addon/`
+- `homeassistant/addon/` – HA add-on manifest (`config.yaml`, `Dockerfile`, `run.sh`)
+- `custom_components/hockeylive/` – HACS custom integration
+
+## Home Assistant
+- HA Host: `root@192.168.68.140` (key auth)
+- HA Config: `/homeassistant/configuration.yaml`
+- HA Add-on path: `/addons/hockeylive/` on HA host
+- After file changes: push to git; HA add-on rebuilds via **Settings → Add-ons → ⋮ → Rebuild**
+
+## Code Editing Rules
+- `app.py` is >1000 lines — always grep or line-read before editing; never ingest full file.
+- Never rewrite large blocks. Find exact target text first, then emit tiny targeted diffs.
+- Style: minimal comments, telegraphic chat only.
+- Output: raw code blocks immediately; blunt bullet explanations; no filler or summaries.
+
+## Git
+- After every task that modifies files: stage all changes (`git add -A`), commit with a descriptive message, and push to `origin master`.
+- Commit message format: `feat|fix|chore: <short description>`
+- Never push if the task was read-only (no file changes).
+- Push happens as the final step of every coding task, after verifying the changes work.

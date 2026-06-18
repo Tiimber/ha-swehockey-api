@@ -22,7 +22,9 @@ Observed table row structure (8 cells per game row):
 
 import re
 import time
+import json
 import logging
+from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional
@@ -246,7 +248,7 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
                 m = re.search(r"Game/Events/(\d+)", href + onclick)
                 if m:
                     game_id = int(m.group(1))
-                    game_id_in_score_cell = (ci == score_cell_idx)
+                    game_id_in_score_cell = ci == score_cell_idx
                     break
 
         # ── Score ──────────────────────────────────────────────────
@@ -282,7 +284,9 @@ def _parse_schedule(html: str, season_id: int) -> list[dict]:
         #       the team-names cell (or is absent).  This signal appears as soon as the
         #       game ends, before the period scores text is always updated.
         period_entry_count = period_scores.count(",") + 1 if period_scores else 0
-        is_completed = home_score is not None and (period_entry_count >= 3 or game_id_in_score_cell)
+        is_completed = home_score is not None and (
+            period_entry_count >= 3 or game_id_in_score_cell
+        )
 
         games.append(
             {
@@ -965,3 +969,132 @@ def discover_new_seasons(known_ids: list[int]) -> list[int]:
             found.add(int(m.group(1)))
     known = set(known_ids)
     return sorted(found - known)
+
+
+# ---------------------------------------------------------------------------
+# League discovery
+# ---------------------------------------------------------------------------
+
+_leagues_cache: dict = {"data": None, "fetched_at": None}
+_LEAGUES_TTL = 86400 * 7  # 7-day safety net; nightly job force-refreshes
+
+
+def _leagues_cache_path() -> Path:
+    for base in [Path("/data"), Path("/config"), Path(".")]:
+        if base.exists():
+            return base / "leagues_cache.json"
+    return Path("leagues_cache.json")
+
+_YEAR_RE = re.compile(r"^\d{4}(-\d{2,4})?$")
+_HREF_RE = re.compile(r"/ScheduleAndResults/(Overview|Schedule)/(\d+)")
+
+
+def fetch_leagues() -> list[dict]:
+    """
+    Scrape the swehockey.se navbar to discover all current leagues and their
+    sub-competitions (season IDs).
+
+    Returns list of:
+    {
+        "league": "SHL",
+        "season_id": 18263,
+        "sub_competitions": [
+            {"name": "SHL", "season_id": 18263},
+            {"name": "SM-slutspel SHL", "season_id": 19791},
+        ]
+    }
+    """
+    global _leagues_cache
+    now = time.monotonic()
+    if (
+        _leagues_cache["data"] is not None
+        and _leagues_cache["fetched_at"] is not None
+        and now - _leagues_cache["fetched_at"] < _LEAGUES_TTL
+    ):
+        return _leagues_cache["data"]
+
+    # Try loading from disk first
+    cached_path = _leagues_cache_path()
+    if cached_path.exists():
+        try:
+            with cached_path.open(encoding="utf-8") as f:
+                disk_data = json.load(f)
+            fetched_at_str = disk_data.get("fetched_at")
+            if fetched_at_str:
+                fetched_at = datetime.fromisoformat(fetched_at_str)
+                tz = ZoneInfo("Europe/Stockholm")
+                now_local = datetime.now(tz)
+                if fetched_at.astimezone(tz).date() == now_local.date():
+                    _leagues_cache["data"] = disk_data["data"]
+                    _leagues_cache["fetched_at"] = now
+                    return list(_leagues_cache["data"])
+        except Exception:
+            pass  # corrupt cache — fall through to re-scrape
+
+    html = _get(f"{BASE_URL}/")
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "lxml")
+    seen_ids: set[int] = set()
+    leagues: list[dict] = []
+
+    for a in soup.find_all("a", href=True):
+        m = _HREF_RE.search(a["href"])
+        if not m:
+            continue
+        season_id = int(m.group(2))
+        if season_id in seen_ids:
+            continue
+        name = a.get_text(strip=True)
+        if not name or _YEAR_RE.match(name):
+            continue
+        seen_ids.add(season_id)
+        leagues.append({"league": name, "season_id": season_id, "href": a["href"]})
+        if len(leagues) >= 15:
+            break
+
+    result: list[dict] = []
+    for entry in leagues:
+        league_name = entry["league"]
+        primary_id = entry["season_id"]
+        sub_comps: list[dict] = [{"name": league_name, "season_id": primary_id}]
+        try:
+            page_html = _get(f"{BASE_URL}{entry['href']}")
+            if page_html:
+                page_soup = BeautifulSoup(page_html, "lxml")
+                selects = page_soup.find_all("select", attrs={"onchange": "doNavigate(this)"})
+                if len(selects) >= 2:
+                    sub_comps = []
+                    for opt in selects[1].find_all("option"):
+                        val = opt.get("value", "")
+                        if not val or val == "0":
+                            continue
+                        sid_m = re.search(r"/(\d+)$", val)
+                        if not sid_m:
+                            continue
+                        opt_name = opt.get_text(strip=True)
+                        if not opt_name:
+                            continue
+                        sub_comps.append({"name": opt_name, "season_id": int(sid_m.group(1))})
+        except Exception as exc:
+            logger.warning("fetch_leagues sub-comp failed for %s: %s", league_name, exc)
+        if not sub_comps:
+            sub_comps = [{"name": league_name, "season_id": primary_id}]
+        result.append({"league": league_name, "season_id": primary_id, "sub_competitions": sub_comps})
+
+    _leagues_cache["data"] = result
+    _leagues_cache["fetched_at"] = now
+
+    # Persist to disk
+    try:
+        cache_path = _leagues_cache_path()
+        with cache_path.open("w", encoding="utf-8") as f:
+            json.dump({
+                "fetched_at": datetime.now(ZoneInfo("Europe/Stockholm")).isoformat(),
+                "data": _leagues_cache["data"],
+            }, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.warning("Failed to persist leagues cache: %s", exc)
+
+    return result

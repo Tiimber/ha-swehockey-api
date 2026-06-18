@@ -2,27 +2,58 @@
   "config": {
     "step": {
       "user": {
-        "title": "HockeyLive – Säsongsider",
-        "description": "Ange ID:n för de säsonger du vill följa (kommaseparerade).\nSHL 2024/25 grundserie: 18263, SM-slutspel: 19791",
+        "title": "HockeyLive – API-inställningar",
+        "description": "Ange URL:en till din HockeyLive API-server.",
         "data": {
-          "season_ids": "Säsongs-ID:n"
+          "api_url": "API-URL"
+        },
+        "data_description": {
+          "api_url": "Ange URL:en till din HockeyLive API-server (t.ex. http://192.168.68.50:8080)"
+        }
+      },
+      "pick_league": {
+        "title": "HockeyLive – Välj liga",
+        "description": "Välj en liga.",
+        "data": {
+          "league": "Liga"
+        }
+      },
+      "pick_sub": {
+        "title": "HockeyLive – Välj tävling",
+        "description": "Välj en tävling (grundserie, slutspel, osv.).",
+        "data": {
+          "sub_competition": "Tävling"
         }
       },
       "pick_team": {
         "title": "HockeyLive – Välj lag",
-        "description": "Hittade {team_count} lag i säsong(erna) {season_ids}.",
+        "description": "Välj ditt lag.",
         "data": {
           "team": "Lag"
         }
       }
     },
     "error": {
-      "invalid_season_ids": "Ogiltiga säsongs-ID:n – ange heltal separerade med komma.",
-      "no_teams_found":     "Hittade inga lag. Kontrollera att ID:na är korrekta.",
-      "cannot_connect":     "Kunde inte ansluta till swehockey.se. Försök igen."
+      "cannot_connect":   "Kunde inte ansluta till API:et. Kontrollera URL:en och försök igen.",
+      "no_leagues_found": "Hittade inga ligor. Kontrollera att API:et körs korrekt.",
+      "no_teams_found":   "Hittade inga lag för den här tävlingen."
     },
     "abort": {
-      "already_configured": "Det här laget är redan konfigurerat med samma säsonger."
+      "already_configured": "Det här laget är redan konfigurerat för detta API."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HockeyLive – Uppdatera API-URL",
+        "description": "Uppdatera URL:en till din HockeyLive API-server (t.ex. om servern har flyttat).",
+        "data": {
+          "api_url": "API-URL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kunde inte ansluta till API:et. Kontrollera URL:en och försök igen."
     }
   }
 }

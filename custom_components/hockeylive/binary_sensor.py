@@ -44,15 +44,17 @@ class HockeyIsLiveSensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        live = self.coordinator.data.get("live") if self.coordinator.data else None
-        return bool(live and live.get("is_playing"))
+        return bool(
+            self.coordinator.data
+            and self.coordinator.data.get("current", {}).get("is_live", False)
+        )
 
     @property
     def extra_state_attributes(self) -> dict:
-        live = self.coordinator.data.get("live") if self.coordinator.data else {}
+        current = (self.coordinator.data or {}).get("current") or {}
         return {
-            "home_team":    live.get("home_team"),
-            "away_team":    live.get("away_team"),
-            "period":       live.get("period"),
-            "period_label": live.get("period_label"),
+            "home_team":    current.get("home_team"),
+            "away_team":    current.get("away_team"),
+            "period":       current.get("period"),
+            "period_label": current.get("period_label"),
         }

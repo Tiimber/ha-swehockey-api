@@ -67,20 +67,20 @@ class HockeyNextMatchSensor(_HockeySensor):
 
     @property
     def native_value(self) -> str:
-        game = self.coordinator.data.get("next_match") if self.coordinator.data else None
+        game = self.coordinator.data.get("next") if self.coordinator.data else None
         if not game:
             return "–"
-        return game.get("datetime_iso") or "–"
+        return game.get("datetime") or "–"
 
     @property
     def extra_state_attributes(self) -> dict:
-        game = self.coordinator.data.get("next_match") if self.coordinator.data else None
+        game = self.coordinator.data.get("next") if self.coordinator.data else None
         if not game:
             return {}
         return {
             "opponent":    game.get("opponent"),
             "venue":       game.get("venue"),
-            "is_home":     game.get("is_home_game"),
+            "is_home":     game.get("is_home"),
             "home_team":   game.get("home_team"),
             "away_team":   game.get("away_team"),
             "round":       game.get("round"),
@@ -99,7 +99,7 @@ class HockeyLastResultSensor(_HockeySensor):
 
     @property
     def native_value(self) -> str:
-        game = self.coordinator.data.get("last_match") if self.coordinator.data else None
+        game = self.coordinator.data.get("previous") if self.coordinator.data else None
         if not game:
             return "–"
         sf = game.get("score_for")
@@ -110,14 +110,13 @@ class HockeyLastResultSensor(_HockeySensor):
 
     @property
     def extra_state_attributes(self) -> dict:
-        game = self.coordinator.data.get("last_match") if self.coordinator.data else None
+        game = self.coordinator.data.get("previous") if self.coordinator.data else None
         if not game:
             return {}
         return {
-            "datetime":      game.get("datetime_iso"),
-            "opponent":      game.get("opponent"),
+            "datetime":      game.get("datetime"),
+            "opponent":      game.get("away_team") if game.get("home_team", "").lower() == self._team.lower() else game.get("home_team"),
             "venue":         game.get("venue"),
-            "is_home":       game.get("is_home_game"),
             "home_team":     game.get("home_team"),
             "away_team":     game.get("away_team"),
             "home_score":    game.get("home_score"),
@@ -143,29 +142,32 @@ class HockeyLiveScoreSensor(_HockeySensor):
 
     @property
     def native_value(self) -> str:
-        live = self.coordinator.data.get("live") if self.coordinator.data else None
-        if not live or not live.get("is_playing"):
+        current = self.coordinator.data.get("current") if self.coordinator.data else None
+        if not current or not current.get("is_live"):
             return "–"
-        h = live.get("home_score", 0)
-        a = live.get("away_score", 0)
+        h = current.get("home_score", 0)
+        a = current.get("away_score", 0)
         return f"{h}–{a}"
 
     @property
     def extra_state_attributes(self) -> dict:
-        live = self.coordinator.data.get("live") if self.coordinator.data else None
-        if not live or not live.get("is_playing"):
+        current = self.coordinator.data.get("current") if self.coordinator.data else None
+        if not current or not current.get("is_live"):
             return {}
         return {
-            "home_team":    live.get("home_team"),
-            "away_team":    live.get("away_team"),
-            "home_score":   live.get("home_score"),
-            "away_score":   live.get("away_score"),
-            "period":       live.get("period"),
-            "period_label": live.get("period_label"),
-            "period_clock": live.get("period_clock"),
-            "is_overtime":  live.get("is_overtime"),
-            "is_shootout":  live.get("is_shootout"),
-            "venue":        live.get("venue"),
+            "home_team":        current.get("home_team"),
+            "away_team":        current.get("away_team"),
+            "home_score":       current.get("home_score"),
+            "away_score":       current.get("away_score"),
+            "period":           current.get("period"),
+            "period_label":     current.get("period_label"),
+            "period_clock":     current.get("period_clock"),
+            "is_overtime":      current.get("is_overtime"),
+            "is_shootout":      current.get("is_shootout"),
+            "venue":            current.get("venue"),
+            "goals":            current.get("goals"),
+            "last_goal":        current.get("last_goal"),
+            "active_penalties": current.get("active_penalties"),
         }
 
 
@@ -181,7 +183,7 @@ class HockeyPeriodSensor(_HockeySensor):
 
     @property
     def native_value(self) -> str:
-        live = self.coordinator.data.get("live") if self.coordinator.data else None
-        if not live or not live.get("is_playing"):
+        current = self.coordinator.data.get("current") if self.coordinator.data else None
+        if not current or not current.get("is_live"):
             return "–"
-        return live.get("period_label") or "–"
+        return current.get("period_label") or "–"

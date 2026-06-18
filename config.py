@@ -38,8 +38,6 @@ def load_config(path: Optional[Path] = None) -> dict:
 
 def _validate(cfg: dict, source: str) -> None:
     errors = []
-    if not cfg.get("team"):
-        errors.append("'team' is required (e.g. team: HV71)")
     if not cfg.get("season_ids"):
         errors.append(
             "'season_ids' is required (list of swehockey.se season IDs)"
@@ -48,6 +46,8 @@ def _validate(cfg: dict, source: str) -> None:
         raise ValueError(
             f"Config errors in {source}:\n" + "\n".join(f"  - {e}" for e in errors)
         )
+    # team is optional; default to None so watchlist-only mode works
+    cfg.setdefault("team", None)
 
 
 # Expose a simple accessor used by app.py

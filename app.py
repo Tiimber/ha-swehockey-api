@@ -70,6 +70,7 @@ STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 # ---------------------------------------------------------------------------
 
 _schedule_cache: dict[int, dict] = {}
+_demo_cycle: int = 0
 
 # Cache of goals for matches that finished today, keyed by game_id.
 # Populated on first request after the game ends; survives across polls.
@@ -154,7 +155,8 @@ async def _ensure_seasons_fresh(season_ids: list[int]) -> None:
 
 def _all_known_season_ids(cfg: dict) -> set[int]:
     """All season IDs from config plus the watchlist."""
-    return set(cfg["season_ids"]) | watchlist.all_watched_season_ids()
+    base = set(cfg.get("season_ids") or [])
+    return base | watchlist.all_watched_season_ids()
 
 
 def _team_games(team: str, season_ids: list[int]) -> list[dict]:
@@ -180,8 +182,9 @@ def _resolve_season_ids(team: str, cfg: dict) -> list[int]:
         for w in watches:
             ids.update(w["season_ids"])
         return sorted(ids)
-    if team.lower() == cfg["team"].lower():
-        return cfg["season_ids"]
+    cfg_team = cfg.get("team")
+    if cfg_team and team.lower() == cfg_team.lower():
+        return cfg.get("season_ids") or []
     raise HTTPException(
         status_code=404,
         detail=(
@@ -260,6 +263,65 @@ async def _auto_refresh_loop(cfg: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Leagues pre-warm + nightly midnight refresh
+# ---------------------------------------------------------------------------
+
+
+async def _prewarm_leagues() -> None:
+    """Pre-warm leagues cache at startup; refresh nightly at midnight Stockholm."""
+    STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
+    try:
+        await asyncio.to_thread(scraper.fetch_leagues)
+        logger.info("Leagues cache pre-warmed at startup")
+    except Exception as exc:
+        logger.warning("Leagues pre-warm failed: %s", exc)
+    # Pre-warm all season schedules so /leagues responds instantly
+    try:
+        leagues_data = scraper._leagues_cache.get("data") or []
+        all_season_ids = [
+            sub["season_id"]
+            for lg in leagues_data
+            for sub in lg.get("sub_competitions", [])
+            if sub.get("season_id") and sub["season_id"] != 0
+        ]
+        if all_season_ids:
+            await _ensure_seasons_fresh(all_season_ids)
+            logger.info("Season schedules pre-warmed for %d seasons", len(all_season_ids))
+    except Exception as exc:
+        logger.warning("Season schedule pre-warm failed: %s", exc)
+    while True:
+        now = datetime.now(STOCKHOLM_TZ)
+        tomorrow = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        sleep_seconds = (tomorrow - now).total_seconds()
+        logger.info(
+            "Leagues cache: next refresh in %.0f s (midnight Stockholm)", sleep_seconds
+        )
+        await asyncio.sleep(sleep_seconds)
+        try:
+            scraper._leagues_cache["fetched_at"] = None
+            await asyncio.to_thread(scraper.fetch_leagues)
+            logger.info("Leagues cache refreshed at midnight")
+        except Exception as exc:
+            logger.warning("Leagues midnight refresh failed: %s", exc)
+        # Pre-warm all season schedules so /leagues responds instantly
+        try:
+            leagues_data = scraper._leagues_cache.get("data") or []
+            all_season_ids = [
+                sub["season_id"]
+                for lg in leagues_data
+                for sub in lg.get("sub_competitions", [])
+                if sub.get("season_id") and sub["season_id"] != 0
+            ]
+            if all_season_ids:
+                await _ensure_seasons_fresh(all_season_ids)
+                logger.info("Season schedules pre-warmed for %d seasons", len(all_season_ids))
+        except Exception as exc:
+            logger.warning("Season schedule pre-warm failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # App lifespan
 # ---------------------------------------------------------------------------
 
@@ -268,7 +330,8 @@ async def _auto_refresh_loop(cfg: dict) -> None:
 async def lifespan(app: FastAPI):
     global _mqtt_pub
     cfg = cfg_module.get()
-    for sid in _all_known_season_ids(cfg):
+    season_ids_to_warm = _all_known_season_ids(cfg)
+    for sid in season_ids_to_warm:
         await _refresh_season(sid)
 
     # Connect to MQTT broker if configured
@@ -303,8 +366,10 @@ async def lifespan(app: FastAPI):
         print("[MQTT] Disabled (mqtt_host is empty)", flush=True)
 
     task = asyncio.create_task(_auto_refresh_loop(cfg))
+    leagues_task = asyncio.create_task(_prewarm_leagues())
     yield
     task.cancel()
+    leagues_task.cancel()
     if _mqtt_pub is not None:
         _mqtt_pub.disconnect()
 
@@ -512,10 +577,15 @@ async def root():
     }
 
 
+_NO_DEFAULT_TEAM = HTTPException(status_code=503, detail="No default team configured")
+
+
 @app.get("/next")
 async def next_match():
     """Next upcoming or currently ongoing match."""
     cfg = cfg_module.get()
+    if not cfg.get("team"):
+        raise _NO_DEFAULT_TEAM
     await _ensure_fresh(cfg)
 
     now = _now()
@@ -540,6 +610,8 @@ async def next_match():
 async def last_match():
     """Most recently completed match and its result."""
     cfg = cfg_module.get()
+    if not cfg.get("team"):
+        raise _NO_DEFAULT_TEAM
     await _ensure_fresh(cfg)
 
     completed = [
@@ -562,6 +634,8 @@ async def live_match():
     Returns 404 if no game is live.
     """
     cfg = cfg_module.get()
+    if not cfg.get("team"):
+        raise _NO_DEFAULT_TEAM
     await _ensure_fresh(cfg)
 
     for g in _team_games(cfg["team"], cfg["season_ids"]):
@@ -586,6 +660,8 @@ async def status():
     Always returns 200 with a consistent JSON structure.
     """
     cfg = cfg_module.get()
+    if not cfg.get("team"):
+        raise _NO_DEFAULT_TEAM
     await _ensure_fresh(cfg)
 
     team = cfg["team"]
@@ -652,6 +728,8 @@ async def summary():
                 more than 2 h away.
     """
     cfg = cfg_module.get()
+    if not cfg.get("team"):
+        raise _NO_DEFAULT_TEAM
     await _ensure_fresh(cfg)
 
     team = cfg["team"]
@@ -825,6 +903,64 @@ async def teams():
     return {"season_ids": season_ids, "teams": sorted(all_teams)}
 
 
+@app.get("/leagues")
+async def list_leagues():
+    """
+    Discover all current leagues and their sub-competitions from swehockey.se.
+    Cached for 1 hour.
+    """
+    _FALLBACK = [
+        {
+            "league": "SHL",
+            "season_id": 18263,
+            "sub_competitions": [
+                {"name": "SHL", "season_id": 18263, "teams": []},
+                {"name": "SM-slutspel SHL", "season_id": 19791, "teams": []},
+            ],
+        },
+        {
+            "league": "HockeyAllsvenskan",
+            "season_id": 18266,
+            "sub_competitions": [
+                {"name": "HockeyAllsvenskan", "season_id": 18266, "teams": []},
+                {"name": "SM-slutspel Allsvenskan", "season_id": 19979, "teams": []},
+            ],
+        },
+    ]
+    try:
+        raw = await asyncio.to_thread(scraper.fetch_leagues)
+    except Exception as exc:
+        logger.warning("fetch_leagues failed, using fallback: %s", exc)
+        return {"leagues": [{"league": "Demo", "season_id": 0, "sub_competitions": [{"name": "Demo", "season_id": 0, "teams": ["demo"]}]}] + _FALLBACK}
+
+    enriched: list[dict] = []
+    first_entry = True
+    for league in raw:
+        sub_list: list[dict] = []
+        for sub in league.get("sub_competitions", []):
+            sid = sub["season_id"]
+            try:
+                await _ensure_seasons_fresh([sid])
+                entry = _schedule_cache.get(sid, {})
+                team_set: set[str] = set()
+                for g in entry.get("games", []):
+                    if g.get("home_team"):
+                        team_set.add(g["home_team"])
+                    if g.get("away_team"):
+                        team_set.add(g["away_team"])
+                teams_list = sorted(team_set)
+            except Exception:
+                teams_list = []
+            sub_list.append({"name": sub["name"], "season_id": sid, "teams": teams_list})
+        if first_entry and sub_list:
+            sub_list[0] = dict(sub_list[0], teams=["demo"] + sub_list[0]["teams"])
+            first_entry = False
+        enriched.append({"league": league["league"], "season_id": league["season_id"], "sub_competitions": sub_list})
+
+    demo_entry = {"league": "Demo", "season_id": 0, "sub_competitions": [{"name": "Demo", "season_id": 0, "teams": ["demo"]}]}
+    return {"leagues": [demo_entry] + enriched}
+
+
 @app.get("/refresh")
 async def force_refresh():
     """Force an immediate cache refresh of all known seasons."""
@@ -926,6 +1062,22 @@ async def add_watch(req: WatchRequest):
 
     Use GET /search?q=... to find the correct team name spelling first.
     """
+    if req.team.lower() == "demo":
+        watch_id, created = watchlist.add_watch("demo", req.season_ids or [0], req.name)
+        return {
+            "id": watch_id,
+            "created": created,
+            "team": "demo",
+            "seasons": [{"season_id": sid, "season_name": "Demo Season"} for sid in (req.season_ids or [0])],
+            "links": {
+                "status": f"/watch/{watch_id}/status",
+                "next": f"/watch/{watch_id}/next",
+                "last": f"/watch/{watch_id}/last",
+                "live": f"/watch/{watch_id}/live",
+                "schedule": f"/watch/{watch_id}/schedule",
+            },
+        }
+
     if not req.season_ids:
         raise HTTPException(status_code=422, detail="season_ids must not be empty.")
 
@@ -1280,4 +1432,279 @@ async def team_schedule(team: str):
         "season_ids": season_ids,
         "games": [_game_to_dict(g, fake_cfg) for g in games],
         "total": len(games),
+    }
+
+
+@app.get("/team/{team}/now")
+async def team_now(team: str):
+    """Previous / current / next summary for any watched team."""
+    global _demo_cycle
+
+    # --- demo intercept ---
+    if team.lower() == "demo":
+        _demo_cycle = (_demo_cycle + 1) % 20
+        step = _demo_cycle
+        now_iso = _now().isoformat()
+
+        _demo_prev = {
+            "datetime": "2026-06-10T19:00:00+02:00",
+            "home_team": "Demo FC",
+            "away_team": "Test IK",
+            "home_score": 3,
+            "away_score": 2,
+            "score_for": 3,
+            "score_against": 2,
+            "won": True,
+            "overtime": False,
+            "shootout": False,
+            "venue": "Demo Arena",
+            "round": "Round 30",
+            "period_scores": "2-1,1-1",
+        }
+        _demo_next = {
+            "datetime": "2026-06-25T19:00:00+02:00",
+            "home_team": "Demo FC",
+            "away_team": "Test IK",
+            "is_home": True,
+            "opponent": "Test IK",
+            "venue": "Demo Arena",
+            "round": "Round 32",
+        }
+        _fake_goals = [
+            {"time": "08:23", "period": "P1", "scorer": "A. Player", "team": "Demo FC", "score": "1-0"},
+            {"time": "34:11", "period": "P2", "scorer": "B. Scorer", "team": "Test IK", "score": "1-1"},
+        ]
+        _fake_penalty = {"player": "C. Rough", "team": "Test IK", "minutes": 2, "type": "Roughing", "time": "25:44"}
+
+        if step <= 1:
+            cur = {
+                "datetime": "2026-06-18T19:00:00+02:00",
+                "home_team": "Demo FC", "away_team": "Test IK",
+                "started": False, "is_live": False, "is_completed": False,
+                "home_score": None, "away_score": None,
+                "score_for": None, "score_against": None, "won": None,
+                "period": None, "period_label": None, "period_clock": None,
+                "is_overtime": False, "is_shootout": False,
+                "goals": [], "last_goal": None, "penalties": [], "active_penalties": [],
+                "venue": "Demo Arena", "round": "Round 31",
+            }
+            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+
+        if step <= 5:
+            hs = [0, 0, 1, 1, 2][min(step - 2, 3)]
+            cur = {
+                "datetime": "2026-06-18T19:00:00+02:00",
+                "home_team": "Demo FC", "away_team": "Test IK",
+                "started": True, "is_live": True, "is_completed": False,
+                "home_score": hs, "away_score": 0,
+                "score_for": hs, "score_against": 0, "won": None,
+                "period": "P1", "period_label": "Period 1",
+                "period_clock": f"{(step - 2) * 5:02d}:00",
+                "is_overtime": False, "is_shootout": False,
+                "goals": _fake_goals[:hs], "last_goal": _fake_goals[hs - 1] if hs else None,
+                "penalties": [], "active_penalties": [],
+                "venue": "Demo Arena", "round": "Round 31",
+            }
+            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+
+        if step <= 9:
+            as_ = [1, 1, 2, 2][step - 6]
+            cur = {
+                "datetime": "2026-06-18T19:00:00+02:00",
+                "home_team": "Demo FC", "away_team": "Test IK",
+                "started": True, "is_live": True, "is_completed": False,
+                "home_score": 2, "away_score": as_,
+                "score_for": 2, "score_against": as_, "won": None,
+                "period": "P2", "period_label": "Period 2",
+                "period_clock": f"{(step - 6) * 5:02d}:00",
+                "is_overtime": False, "is_shootout": False,
+                "goals": _fake_goals, "last_goal": _fake_goals[-1],
+                "penalties": [_fake_penalty], "active_penalties": [_fake_penalty],
+                "venue": "Demo Arena", "round": "Round 31",
+            }
+            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+
+        if step <= 13:
+            hs3 = [2, 3, 3, 3][step - 10]
+            cur = {
+                "datetime": "2026-06-18T19:00:00+02:00",
+                "home_team": "Demo FC", "away_team": "Test IK",
+                "started": True, "is_live": True, "is_completed": False,
+                "home_score": hs3, "away_score": 2,
+                "score_for": hs3, "score_against": 2, "won": None,
+                "period": "P3", "period_label": "Period 3",
+                "period_clock": f"{(step - 10) * 5:02d}:00",
+                "is_overtime": False, "is_shootout": False,
+                "goals": _fake_goals, "last_goal": _fake_goals[-1],
+                "penalties": [], "active_penalties": [],
+                "venue": "Demo Arena", "round": "Round 31",
+            }
+            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+
+        if step <= 15:
+            cur = {
+                "datetime": "2026-06-18T19:00:00+02:00",
+                "home_team": "Demo FC", "away_team": "Test IK",
+                "started": True, "is_live": True, "is_completed": False,
+                "home_score": 3, "away_score": 2,
+                "score_for": 3, "score_against": 2, "won": None,
+                "period": "OT", "period_label": "Overtime",
+                "period_clock": f"{(step - 14) * 2:02d}:00",
+                "is_overtime": True, "is_shootout": False,
+                "goals": _fake_goals, "last_goal": _fake_goals[-1],
+                "penalties": [], "active_penalties": [],
+                "venue": "Demo Arena", "round": "Round 31",
+            }
+            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+
+        if step <= 17:
+            cur = {
+                "datetime": "2026-06-18T19:00:00+02:00",
+                "home_team": "Demo FC", "away_team": "Test IK",
+                "started": True, "is_live": False, "is_completed": True,
+                "home_score": 4, "away_score": 2,
+                "score_for": 4, "score_against": 2, "won": True,
+                "period": "OT", "period_label": "Overtime",
+                "period_clock": None,
+                "is_overtime": True, "is_shootout": False,
+                "goals": _fake_goals, "last_goal": _fake_goals[-1],
+                "penalties": [], "active_penalties": [],
+                "venue": "Demo Arena", "round": "Round 31",
+            }
+            return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": cur, "next": None}
+
+        # steps 18-19: pre-game for next match
+        return {"team": "demo", "updated_at": now_iso, "previous": _demo_prev, "current": None, "next": _demo_next}
+
+    # --- real logic ---
+    cfg = cfg_module.get()
+    season_ids = list(watchlist.get_season_ids_for_team(team))
+    if not season_ids:
+        cfg_team = cfg.get("team")
+        if cfg_team and team.lower() == cfg_team.lower():
+            season_ids = cfg.get("season_ids") or []
+    if not season_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Team '{team}' is not watched. Add it with POST /watch.",
+        )
+
+    await _ensure_seasons_fresh(season_ids)
+    fake_cfg = {**cfg, "team": team}
+    games = _team_games(team, season_ids)
+    now = _now()
+    today = now.date()
+
+    PRE_GAME_WINDOW = 7200
+
+    today_games = [g for g in games if g["datetime"] and g["datetime"].date() == today]
+    today_as_current = [
+        g for g in today_games
+        if (g["datetime"] - now).total_seconds() <= PRE_GAME_WINDOW
+    ]
+    today_as_next = [
+        g for g in today_games
+        if (g["datetime"] - now).total_seconds() > PRE_GAME_WINDOW
+        and not g["is_completed"]
+    ]
+    before_today = [
+        g for g in games
+        if g["datetime"] and g["datetime"].date() < today and g["is_completed"]
+    ]
+    after_today = [
+        g for g in games
+        if g["datetime"] and g["datetime"].date() > today and not g["is_completed"]
+    ]
+
+    previous_game = max(before_today, key=lambda g: g["datetime"]) if before_today else None
+
+    def _prev_dict(g: dict) -> dict:
+        d = _game_to_dict(g, fake_cfg)
+        return {
+            "datetime": d["datetime_iso"],
+            "home_team": d["home_team"],
+            "away_team": d["away_team"],
+            "home_score": d["home_score"],
+            "away_score": d["away_score"],
+            "score_for": d["score_for"],
+            "score_against": d["score_against"],
+            "won": d["won"],
+            "overtime": bool(g.get("period_scores") and "OT" in (g["period_scores"] or "")),
+            "shootout": bool(g.get("period_scores") and "SO" in (g["period_scores"] or "")),
+            "venue": d["venue"],
+            "round": d["round"],
+            "period_scores": g.get("period_scores"),
+        }
+
+    current_data: Optional[dict] = None
+    if today_as_current:
+        tg = today_as_current[0]
+        base = _game_to_dict(tg, fake_cfg)
+        started = tg["datetime"] <= now
+        is_live_now = _is_live(tg)
+        is_done = tg["is_completed"]
+        won: Optional[bool] = None
+        if is_done and base["score_for"] is not None and base["score_against"] is not None:
+            won = base["score_for"] > base["score_against"]
+        current_data = {
+            "datetime": base["datetime_iso"],
+            "home_team": tg["home_team"],
+            "away_team": tg["away_team"],
+            "home_score": tg["home_score"],
+            "away_score": tg["away_score"],
+            "score_for": base["score_for"],
+            "score_against": base["score_against"],
+            "started": started,
+            "is_live": is_live_now,
+            "is_completed": is_done,
+            "won": won,
+            "period": None,
+            "period_label": None,
+            "period_clock": None,
+            "is_overtime": False,
+            "is_shootout": False,
+            "goals": [],
+            "last_goal": None,
+            "penalties": [],
+            "active_penalties": [],
+            "venue": base["venue"],
+            "round": base["round"],
+        }
+        if is_live_now:
+            detail = _live_detail(tg)
+            current_data.update({
+                "home_score": detail["home_score"],
+                "away_score": detail["away_score"],
+                "period": detail["period"],
+                "period_label": detail["period_label"],
+                "period_clock": detail["period_clock"],
+                "is_overtime": detail["is_overtime"],
+                "is_shootout": detail["is_shootout"],
+                "goals": detail.get("goals", []),
+                "last_goal": detail.get("last_goal"),
+                "penalties": detail.get("penalties", []),
+                "active_penalties": detail.get("active_penalties", []),
+            })
+
+    next_candidates = sorted(today_as_next + after_today, key=lambda g: g["datetime"])
+    next_game = next_candidates[0] if next_candidates else None
+
+    def _next_dict(g: dict) -> dict:
+        d = _game_to_dict(g, fake_cfg)
+        return {
+            "datetime": d["datetime_iso"],
+            "home_team": d["home_team"],
+            "away_team": d["away_team"],
+            "is_home": d["is_home_game"],
+            "opponent": d["opponent"],
+            "venue": d["venue"],
+            "round": d["round"],
+        }
+
+    return {
+        "team": team,
+        "updated_at": now.isoformat(),
+        "previous": _prev_dict(previous_game) if previous_game else None,
+        "current": current_data,
+        "next": _next_dict(next_game) if next_game else None,
     }
