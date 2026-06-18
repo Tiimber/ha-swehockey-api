@@ -339,6 +339,97 @@ async def _prewarm_leagues() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Demo MQTT loop
+# ---------------------------------------------------------------------------
+
+
+def _demo_status_payload() -> dict:
+    """Convert _demo_now() output into the _team_status_payload format for MQTT."""
+    d = _demo_now()
+    cur = d.get("current") or {}
+    nxt = d.get("next")
+    prv = d.get("previous")
+
+    is_playing = cur.get("is_live", False)
+
+    live_data: dict = {"is_playing": is_playing}
+    if is_playing:
+        live_data.update({
+            "home_team": cur.get("home_team"),
+            "away_team": cur.get("away_team"),
+            "home_score": cur.get("home_score", 0),
+            "away_score": cur.get("away_score", 0),
+            "period": cur.get("period"),
+            "period_label": cur.get("period_label"),
+            "period_clock": cur.get("period_clock"),
+            "is_overtime": cur.get("is_overtime", False),
+            "is_shootout": cur.get("is_shootout", False),
+            "goals": cur.get("goals", []),
+            "last_goal": cur.get("last_goal"),
+            "venue": cur.get("venue"),
+        })
+
+    next_match = None
+    if nxt:
+        next_match = {
+            "datetime_iso": nxt.get("datetime"),
+            "home_team": nxt.get("home_team"),
+            "away_team": nxt.get("away_team"),
+            "opponent": nxt.get("opponent"),
+            "venue": nxt.get("venue"),
+            "is_home": nxt.get("is_home"),
+        }
+    elif cur and not cur.get("is_completed") and not is_playing:
+        # pregame: treat current as next_match for status logic
+        next_match = {
+            "datetime_iso": cur.get("datetime"),
+            "home_team": cur.get("home_team"),
+            "away_team": cur.get("away_team"),
+            "opponent": cur.get("away_team") if cur.get("home_team", "").lower() == "demo fc" else cur.get("home_team"),
+            "venue": cur.get("venue"),
+            "is_home": cur.get("home_team", "").lower() == "demo fc",
+        }
+
+    last_match = None
+    if prv:
+        last_match = {
+            "date": (prv.get("datetime") or "")[:10],
+            "home_team": prv.get("home_team"),
+            "away_team": prv.get("away_team"),
+            "home_score": prv.get("home_score"),
+            "away_score": prv.get("away_score"),
+            "won": prv.get("won"),
+            "opponent": prv.get("away_team") if (prv.get("home_team") or "").lower() == "demo fc" else prv.get("home_team"),
+            "period_scores": prv.get("period_scores"),
+        }
+
+    return {
+        "team": "demo",
+        "season_ids": [0],
+        "updated_at": d.get("updated_at"),
+        "sim_time": d.get("sim_time"),
+        "live": live_data,
+        "next_match": next_match,
+        "last_match": last_match,
+    }
+
+
+async def _demo_refresh_loop() -> None:
+    """Push MQTT state for demo watches every 15 seconds."""
+    while True:
+        await asyncio.sleep(15)
+        if _mqtt_pub is None:
+            continue
+        try:
+            payload = _demo_status_payload()
+            for watch_id, watch in watchlist.get_watches().items():
+                if watch.get("team", "").lower() == "demo":
+                    _mqtt_pub.publish_state(watch_id, payload)
+        except Exception as exc:
+            logger.debug("Demo MQTT loop error: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # App lifespan
 # ---------------------------------------------------------------------------
 
@@ -384,9 +475,11 @@ async def lifespan(app: FastAPI):
 
     task = asyncio.create_task(_auto_refresh_loop(cfg))
     leagues_task = asyncio.create_task(_prewarm_leagues())
+    demo_task = asyncio.create_task(_demo_refresh_loop())
     yield
     task.cancel()
     leagues_task.cancel()
+    demo_task.cancel()
     if _mqtt_pub is not None:
         _mqtt_pub.disconnect()
 
@@ -1809,9 +1902,15 @@ def _demo_now() -> dict:
         gdur = 75 if not prev_game.get("overtime") else 95
         demo_minutes_ago = max(0, int(sim - (prev_game["start_min"] + gdur)))
 
+    # Simulated current time as ISO string (anchored to 2026-06-22 = Monday)
+    _sim_base = datetime(2026, 6, 22, 0, 0, 0, tzinfo=STOCKHOLM_TZ)
+    _sim_dt = _sim_base + timedelta(minutes=sim)
+    sim_time_iso = _sim_dt.isoformat()
+
     return {
         "team": "demo",
         "updated_at": now_iso,
+        "sim_time": sim_time_iso,
         "minutes_ago": demo_minutes_ago,
         "minutes_until": demo_minutes_until,
         "previous": prev_dict,
