@@ -5,12 +5,9 @@ import logging
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-import aiohttp
-
 from homeassistant.components.image import ImageEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -30,30 +27,30 @@ async def async_setup_entry(
     team = entry.data["team"]
     slug = team.lower().replace(" ", "_")
     api_url = entry.data["api_url"]
-    async_add_entities([HockeyScoreboardImage(coordinator, team, slug, api_url)])
+    async_add_entities([HockeyScoreboardImage(coordinator, hass, team, slug, api_url)])
 
 
 class HockeyScoreboardImage(CoordinatorEntity, ImageEntity):
-    """32x32 PNG scoreboard image, fetched from the API on every coordinator update."""
+    """32x32 PNG scoreboard – URL-based, refreshed on coordinator update."""
 
     _attr_content_type = "image/png"
+    _attr_has_entity_name = True
+    _attr_name = "Scoreboard 32x32"
+    _attr_icon = "mdi:hockey-sticks"
 
     def __init__(
         self,
         coordinator: HockeyLiveCoordinator,
+        hass: HomeAssistant,
         team: str,
         slug: str,
         api_url: str,
     ) -> None:
         CoordinatorEntity.__init__(self, coordinator)
-        ImageEntity.__init__(self, coordinator.hass)
+        ImageEntity.__init__(self, hass)
         self._team = team
         self._slug = slug
-        self._api_url = api_url.rstrip("/")
         self._attr_unique_id = f"{slug}_scoreboard_png"
-        self._attr_name = "Scoreboard 32x32"
-        self._attr_has_entity_name = True
-        self._attr_icon = "mdi:hockey-sticks"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, slug)},
             name=team,
@@ -61,30 +58,18 @@ class HockeyScoreboardImage(CoordinatorEntity, ImageEntity):
             model="HockeyLive Team",
             entry_type=DeviceEntryType.SERVICE,
         )
-        self._cached_image: bytes | None = None
-        self._image_last_updated: datetime = datetime.now(timezone.utc)
+        self._attr_image_url = (
+            f"{api_url.rstrip('/')}/team/{quote(team, safe='')}/png"
+        )
+        self._last_updated: datetime = datetime.now(timezone.utc)
 
     @property
     def image_last_updated(self) -> datetime:
-        return self._image_last_updated
-
-    async def async_image(self) -> bytes | None:
-        """Fetch the PNG from the API and return raw bytes."""
-        url = f"{self._api_url}/team/{quote(self._team, safe='')}/png"
-        try:
-            session = async_get_clientsession(self.hass)
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    data = await resp.read()
-                    self._cached_image = data
-                    self._image_last_updated = datetime.now(timezone.utc)
-                    return data
-                _LOGGER.warning("PNG endpoint returned HTTP %s for %s", resp.status, url)
-        except Exception as exc:
-            _LOGGER.warning("Failed to fetch scoreboard PNG from %s: %s", url, exc)
-        return self._cached_image
+        """Return last updated time – overrides cached_property to stay dynamic."""
+        return self._last_updated
 
     def _handle_coordinator_update(self) -> None:
-        """Mark image as stale on every coordinator update so HA re-fetches it."""
-        self._image_last_updated = datetime.now(timezone.utc)
+        """Bump timestamp on coordinator update so HA re-fetches the image."""
+        self._last_updated = datetime.now(timezone.utc)
+        self._cached_image = None
         self.async_write_ha_state()
