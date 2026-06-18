@@ -1922,33 +1922,22 @@ def _demo_now() -> dict:
 
 
 def _demo_advance_time(rng: "_random.Random") -> None:
-    """Advance simulated time by one tick (called every 15 real seconds).
-
-    Phase behaviour:
-      far-pregame  (>120 min to kickoff)  : +60 min/tick  – fast-forward
-      near-pregame (0-120 min to kickoff) : +2 min/tick   – countdown visible on display
-      live         (game in progress)     : +30 s game-clock/tick – live scoreboard
-      period-break                        : 1 tick pause, then next period
-      post-game / results                 : +5 min/tick   – linger on results
-      post-game / approaching next        : +1 min/tick   – slow approach to next pregame
-      wrap (past all games)               : +60 min/tick then wrap
-    """
+    """Mutate _demo_state to advance simulated time by one tick."""
     global _demo_state
     st = _demo_state
     sim = st["sim_minutes"]
     WEEK = _DEMO_WEEK_MINUTES
 
-    NEAR_PREGAME_MIN = 120   # minutes before kickoff where countdown starts
-    RESULTS_LINGER_MIN = 30  # minutes after game end to show results before rushing to next
+    PRE_GAME_WINDOW_MIN = 120
 
-    # --- classify current phase ---
+    # Find which game we're in/near
     active_game = None
     phase = "idle"
     for g in _DEMO_GAMES:
         gstart = g["start_min"]
         gdur = 75 if not g.get("overtime") else 95
         gend = gstart + gdur
-        if gstart - NEAR_PREGAME_MIN <= sim < gstart:
+        if gstart - PRE_GAME_WINDOW_MIN <= sim < gstart:
             active_game = g
             phase = "pregame"
             break
@@ -1957,61 +1946,31 @@ def _demo_advance_time(rng: "_random.Random") -> None:
             phase = "live"
             break
 
-    # --- idle: between/before games ---
     if phase == "idle":
-        # Find next upcoming game
-        next_g = next((g for g in _DEMO_GAMES if g["start_min"] - NEAR_PREGAME_MIN > sim), None)
-
-        # Check if we just finished a game (game_completed flag set)
-        completed = st.get("game_completed") or False
-        if completed:
-            gidx = st.get("game_index")
-            finished_game = _DEMO_GAMES[gidx] if gidx is not None else None
-            if finished_game:
-                gdur = 75 if not finished_game.get("overtime") else 95
-                game_end_min = finished_game["start_min"] + gdur
-                minutes_since_end = sim - game_end_min
-                if next_g is not None:
-                    dist_to_next_pregame = next_g["start_min"] - NEAR_PREGAME_MIN - sim
-                    if dist_to_next_pregame > RESULTS_LINGER_MIN:
-                        # Still far from next game – linger on results
-                        st["sim_minutes"] = sim + 5
-                    else:
-                        # Approaching next pregame window
-                        st["sim_minutes"] = sim + 1
-                    return
+        # Check if we're close to a pregame window
+        for g in _DEMO_GAMES:
+            gstart = g["start_min"]
+            if sim < gstart - PRE_GAME_WINDOW_MIN:
+                # How far to pregame?
+                dist = gstart - PRE_GAME_WINDOW_MIN - sim
+                if dist <= 120:
+                    # Within 2h of pregame start: advance 15 min
+                    st["sim_minutes"] = (sim + 15) % WEEK
                 else:
-                    # No more games this week – linger then wrap
-                    if minutes_since_end < 60:
-                        st["sim_minutes"] = sim + 5
-                    else:
-                        st["sim_minutes"] = (sim + 60) % WEEK
-                    return
-
-        # No active/completed game context – fast-forward to next pregame
-        if next_g is not None:
-            dist = next_g["start_min"] - NEAR_PREGAME_MIN - sim
-            if dist > 60:
-                st["sim_minutes"] = sim + 60
-            else:
-                st["sim_minutes"] = sim + dist  # land exactly on pregame window start
-            return
+                    st["sim_minutes"] = (sim + 120) % WEEK
+                return
         # Past all games this week
-        st["sim_minutes"] = (sim + 60) % WEEK
+        st["sim_minutes"] = (sim + 120) % WEEK
         return
 
-    # --- pregame: countdown to kickoff ---
     if phase == "pregame":
-        assert active_game is not None
         gstart = active_game["start_min"]
         dist_to_start = gstart - sim
-        if dist_to_start > NEAR_PREGAME_MIN:
-            # Shouldn't happen given phase detection, but guard
-            st["sim_minutes"] = sim + 60
+        if dist_to_start > 120:
+            st["sim_minutes"] = sim + 120
         else:
-            # Countdown: 2 min steps so display shows meaningful countdown
-            st["sim_minutes"] = sim + 2
-        # Snap to game start if we've crossed it
+            st["sim_minutes"] = sim + 15
+        # Reset game clock when we hit game start
         if st["sim_minutes"] >= gstart:
             st["sim_minutes"] = float(gstart)
             st["game_clock_seconds"] = 0.0
@@ -2021,9 +1980,7 @@ def _demo_advance_time(rng: "_random.Random") -> None:
             st["game_index"] = active_game["idx"]
         return
 
-    # --- live: game in progress ---
     if phase == "live":
-        assert active_game is not None
         g = active_game
         pidx = st.get("period_index") or 0
         gc = st.get("game_clock_seconds") or 0.0
@@ -2031,44 +1988,43 @@ def _demo_advance_time(rng: "_random.Random") -> None:
         completed = st.get("game_completed") or False
 
         if completed:
-            # Game just finished – transition to idle/results (keep sim_minutes, clear flag next idle tick)
-            st["sim_minutes"] = sim + 1
+            # Game done, advance wall time
+            st["sim_minutes"] = (sim + 120) % WEEK
             return
 
         if in_break:
-            # One tick pause between periods, then start next period
+            # One tick in break, then start next period
             st["in_period_break"] = False
             st["game_clock_seconds"] = 0.0
             return
 
+        # Advance game clock by random 5-10 minutes
+        chunk = rng.uniform(5 * 60, 10 * 60)
         period_dur = _PERIOD_DUR.get(pidx, 1200)
 
         if pidx == 4:
             # Shootout: one tick then complete
             st["game_completed"] = True
-            st["sim_minutes"] = sim + 1
+            st["sim_minutes"] = sim + 2  # small wall advance
             return
 
-        # Advance game clock by 30 seconds per tick (smooth live scoreboard)
-        chunk = 30.0
         new_gc = gc + chunk
-
         if new_gc >= period_dur:
+            # Period ended
             max_period = 4 if g.get("shootout") else (3 if g.get("overtime") else 2)
             if pidx >= max_period:
                 # Game over
                 st["game_clock_seconds"] = float(period_dur)
                 st["game_completed"] = True
-                st["sim_minutes"] = sim + 1
+                st["sim_minutes"] = sim + 2
             else:
-                # Period ended – enter break
+                # Enter break
                 st["game_clock_seconds"] = float(period_dur)
                 st["in_period_break"] = True
                 st["period_index"] = pidx + 1
-                st["sim_minutes"] = sim + 1
         else:
             st["game_clock_seconds"] = new_gc
-            st["sim_minutes"] = sim + chunk / 60
+            st["sim_minutes"] = sim + chunk / 60  # keep wall time in sync
 
 
 @app.get("/team/{team}/now")
