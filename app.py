@@ -1582,7 +1582,7 @@ _DEMO_GAMES = [
         "period_scores": "0-2,1-0,0-2",
     },
     {
-        "idx": 1, "start_min": 4380, "is_home": False,
+        "idx": 1, "start_min": 5460, "is_home": False,
         "home": "Team 2", "away": "Demo FC", "home_short": "T2", "away_short": "DFC",
         "venue": "Away Arena", "round": "Round 32",
         "outcome": "win",
@@ -1606,7 +1606,7 @@ _DEMO_GAMES = [
         "period_scores": "1-1,2-2,0-2",
     },
     {
-        "idx": 2, "start_min": 9255, "is_home": True,
+        "idx": 2, "start_min": 9555, "is_home": True,
         "home": "Demo FC", "away": "Team 3", "home_short": "DFC", "away_short": "T3",
         "venue": "Demo Arena", "round": "Round 33",
         "outcome": "shootout_win",
