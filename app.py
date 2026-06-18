@@ -1775,9 +1775,13 @@ async def team_leagues(team: str):
         await _ensure_seasons_fresh(all_season_ids)
 
     _VIEW_SUFFIX = re.compile(r'\s*[–-]\s*(Games|Players|Teams|Schedule|Overview)\s*$', re.IGNORECASE)
+    _VIEW_ONLY_NAMES = frozenset({"games", "players", "teams", "schedule", "overview", "results"})
 
-    def _clean_comp_name(name: str) -> str:
-        return _VIEW_SUFFIX.sub('', name).strip()
+    def _clean_comp_name(name: str, league: str = "") -> str:
+        cleaned = _VIEW_SUFFIX.sub('', name).strip()
+        if cleaned.lower() in _VIEW_ONLY_NAMES:
+            return league or cleaned
+        return cleaned
 
     team_lower = team.lower()
     competitions: list[dict] = []
@@ -1795,7 +1799,7 @@ async def team_leagues(team: str):
             if count > 0:
                 competitions.append({
                     "league": _clean_comp_name(lg["league"]),
-                    "name": _clean_comp_name(sub["name"]),
+                    "name": _clean_comp_name(sub["name"], _clean_comp_name(lg["league"])),
                     "season_id": sid,
                     "game_count": count,
                 })
