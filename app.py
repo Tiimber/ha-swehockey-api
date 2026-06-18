@@ -1798,7 +1798,26 @@ def _demo_now() -> dict:
     # --- advance simulated time for next call ---
     _demo_advance_time(rng)
 
-    return {"team": "demo", "updated_at": now_iso, "previous": prev_dict, "current": cur_dict, "next": next_dict}
+    # Compute minutes_until / minutes_ago from simulated time
+    demo_minutes_until: Optional[int] = None
+    demo_minutes_ago: Optional[int] = None
+    if next_game:
+        demo_minutes_until = max(0, int(next_game["start_min"] - sim))
+    elif cur_game and cur_game_phase == "pregame":
+        demo_minutes_until = max(0, int(cur_game["start_min"] - sim))
+    if prev_game:
+        gdur = 75 if not prev_game.get("overtime") else 95
+        demo_minutes_ago = max(0, int(sim - (prev_game["start_min"] + gdur)))
+
+    return {
+        "team": "demo",
+        "updated_at": now_iso,
+        "minutes_ago": demo_minutes_ago,
+        "minutes_until": demo_minutes_until,
+        "previous": prev_dict,
+        "current": cur_dict,
+        "next": next_dict,
+    }
 
 
 def _demo_advance_time(rng: "_random.Random") -> None:
@@ -2039,12 +2058,42 @@ async def team_now(team: str):
             "round": d["round"],
         }
 
+    _prev_out = _prev_dict(previous_game) if previous_game else None
+    _next_out = _next_dict(next_game) if next_game else None
+
+    minutes_ago: Optional[int] = None
+    if _prev_out and _prev_out.get("datetime"):
+        try:
+            from datetime import timezone
+            prev_dt = datetime.fromisoformat(_prev_out["datetime"])
+            minutes_ago = max(0, int((now - prev_dt).total_seconds() // 60))
+        except Exception:
+            pass
+
+    minutes_until: Optional[int] = None
+    if _next_out and _next_out.get("datetime"):
+        try:
+            next_dt = datetime.fromisoformat(_next_out["datetime"])
+            minutes_until = max(0, int((next_dt - now).total_seconds() // 60))
+        except Exception:
+            pass
+    elif current_data and current_data.get("datetime") and not current_data.get("is_completed"):
+        try:
+            cur_dt = datetime.fromisoformat(current_data["datetime"])
+            diff = int((cur_dt - now).total_seconds() // 60)
+            if diff > 0:
+                minutes_until = diff
+        except Exception:
+            pass
+
     return {
         "team": team,
         "updated_at": now.isoformat(),
-        "previous": _prev_dict(previous_game) if previous_game else None,
+        "minutes_ago": minutes_ago,
+        "minutes_until": minutes_until,
+        "previous": _prev_out,
         "current": current_data,
-        "next": _next_dict(next_game) if next_game else None,
+        "next": _next_out,
     }
 
 

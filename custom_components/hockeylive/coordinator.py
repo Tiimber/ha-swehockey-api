@@ -44,7 +44,10 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         current = data.get("current") or {}
         if current.get("is_live"):
             self.update_interval = timedelta(seconds=UPDATE_INTERVAL_LIVE)
-        elif current.get("datetime"):
+        elif current:
+            # pregame or completed-today: poll at game-day rate
+            self.update_interval = timedelta(seconds=UPDATE_INTERVAL_GAME_DAY)
+        elif data.get("next") or data.get("previous"):
             self.update_interval = timedelta(seconds=UPDATE_INTERVAL_GAME_DAY)
         else:
             self.update_interval = timedelta(seconds=UPDATE_INTERVAL_IDLE)

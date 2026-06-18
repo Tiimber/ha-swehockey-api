@@ -88,17 +88,21 @@ class HockeyNextMatchSensor(_HockeySensor):
 
     @property
     def extra_state_attributes(self) -> dict:
-        game = self.coordinator.data.get("next") if self.coordinator.data else None
+        data = self.coordinator.data or {}
+        game = data.get("next")
         if not game:
             return {}
-        return {
-            "opponent":    game.get("opponent"),
-            "venue":       game.get("venue"),
-            "is_home":     game.get("is_home"),
-            "home_team":   game.get("home_team"),
-            "away_team":   game.get("away_team"),
-            "round":       game.get("round"),
+        attrs = {
+            "opponent":      game.get("opponent"),
+            "venue":         game.get("venue"),
+            "is_home":       game.get("is_home"),
+            "home_team":     game.get("home_team"),
+            "away_team":     game.get("away_team"),
+            "round":         game.get("round"),
         }
+        if data.get("minutes_until") is not None:
+            attrs["minutes_until"] = data["minutes_until"]
+        return attrs
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +130,11 @@ class HockeyLastResultSensor(_HockeySensor):
 
     @property
     def extra_state_attributes(self) -> dict:
-        game = self.coordinator.data.get("previous") if self.coordinator.data else None
+        data = self.coordinator.data or {}
+        game = data.get("previous")
         if not game:
             return {}
-        return {
+        attrs = {
             "datetime":      game.get("datetime"),
             "opponent":      game.get("away_team") if game.get("home_team", "").lower() == self._team.lower() else game.get("home_team"),
             "venue":         game.get("venue"),
@@ -144,6 +149,9 @@ class HockeyLastResultSensor(_HockeySensor):
             "shootout":      game.get("shootout"),
             "round":         game.get("round"),
         }
+        if data.get("minutes_ago") is not None:
+            attrs["minutes_ago"] = data["minutes_ago"]
+        return attrs
 
 
 # ---------------------------------------------------------------------------
