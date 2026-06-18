@@ -240,11 +240,11 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     W,H=32,32
     img=Image.new("RGB",(W,H),(0,0,0)); px=img.load()
 
-    cur=data.get("current") or {}
-    prev=data.get("previous") or {}
-    nxt=data.get("next") or {}
+    cur=data.get("current") or None
+    prev=data.get("previous") or None
+    nxt=data.get("next") or None
 
-    live=bool(cur.get("is_live")); done=bool(cur.get("is_completed"))
+    live=bool((cur or {}).get("is_live")); done=bool((cur or {}).get("is_completed"))
 
     if cur:
         ht=cur.get("home_team") or team_name; at=cur.get("away_team") or "???"
@@ -254,6 +254,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
         won=cur.get("won"); goals=cur.get("goals") or []; lg=cur.get("last_goal") or {}
         pscores_raw=cur.get("period_scores") or ""
     elif prev:
+        done=True  # previous game is always completed
         ht=prev.get("home_team") or team_name; at=prev.get("away_team") or "???"
         hs=int(prev.get("home_score") or 0); as_=int(prev.get("away_score") or 0)
         pkey=""; plabel=""; clock=""; ot=bool(prev.get("overtime")); so=bool(prev.get("shootout"))
@@ -296,7 +297,9 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
 
     # ── Zone 3 rows 16-23: Clock / info ──────────────────────────────────
     showing_prev_only = bool(prev) and not cur  # latest result – no zone 3 text
-    if live and clock:
+    if showing_prev_only:
+        pass  # score + dots only; no third row
+    elif live and clock:
         _txtc(px,clock,19,_WHITE,W,H)
     elif live and plabel:
         pass
