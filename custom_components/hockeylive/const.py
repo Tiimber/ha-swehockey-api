@@ -1,6 +1,7 @@
 DOMAIN = "hockeylive"
 
 # How often to poll, depending on current game state.
+UPDATE_INTERVAL_DEMO     = 15     # seconds – demo simulation (advances every 15s)
 UPDATE_INTERVAL_LIVE     = 30     # seconds – live game in progress
 UPDATE_INTERVAL_GAME_DAY = 3600   # 1 hour  – game day, match not yet started
 UPDATE_INTERVAL_IDLE     = 21600  # 6 hours – no game today

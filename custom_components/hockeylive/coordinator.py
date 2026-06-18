@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, UPDATE_INTERVAL_LIVE, UPDATE_INTERVAL_GAME_DAY, UPDATE_INTERVAL_IDLE
+from .const import DOMAIN, UPDATE_INTERVAL_DEMO, UPDATE_INTERVAL_LIVE, UPDATE_INTERVAL_GAME_DAY, UPDATE_INTERVAL_IDLE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,8 +21,8 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._api_url: str = entry.data["api_url"]
         self._team: str = entry.data["team"]
-        # Demo always polls at live rate; real teams start idle and adjust after first fetch
-        initial_interval = UPDATE_INTERVAL_LIVE if self._team.lower() == "demo" else UPDATE_INTERVAL_IDLE
+        # Demo always polls at demo rate (15s); real teams start idle and adjust after first fetch
+        initial_interval = UPDATE_INTERVAL_DEMO if self._team.lower() == "demo" else UPDATE_INTERVAL_IDLE
         super().__init__(
             hass,
             _LOGGER,
@@ -43,9 +43,9 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
         except Exception as exc:
             raise UpdateFailed(f"Failed to reach API at {url}: {exc}") from exc
 
-        # Demo team always polls at live rate (simulation advances every call)
+        # Demo team always polls at demo rate (simulation advances every 15s)
         if self._team.lower() == "demo":
-            self.update_interval = timedelta(seconds=UPDATE_INTERVAL_LIVE)
+            self.update_interval = timedelta(seconds=UPDATE_INTERVAL_DEMO)
             return data
 
         current = data.get("current") or {}
