@@ -204,15 +204,26 @@ def _dot(px,cx:int,cy:int,col,W:int,H:int,sz:int=3)->None:
             nx,ny=cx+dx,cy+dy
             if 0<=nx<W and 0<=ny<H: px[nx,ny]=col
 
-def _dot_colors(plabel:str,live:bool,done:bool,won,ot:bool,so:bool,pscores)->list:
-    dots=[_GREY]*5
+def _dot_colors(pkey:str,live:bool,done:bool,won,ot:bool,so:bool,pscores)->list:
+    dots:list=list([_GREY]*5)
     if not live and not done: return dots
     def rc(w): return _GREEN if w is True else (_RED if w is False else _YELLOW)
+    def pc(h,a): return _GREEN if h>a else (_RED if h<a else _YELLOW)
     if done:
-        c=rc(won); dots[0]=dots[1]=dots[2]=c
-        dots[3]=c if ot else _GREY; dots[4]=c if so else _GREY
+        if pscores:
+            reg=[pscores[i] if i<len(pscores) else None for i in range(3)]
+            for i,s in enumerate(reg):
+                dots[i]=pc(*s) if s else _GREY
+            if ot:
+                s=pscores[3] if len(pscores)>3 else None
+                dots[3]=pc(*s) if s else rc(won)
+            if so:
+                dots[4]=rc(won)
+        else:
+            c=rc(won); dots[0]=dots[1]=dots[2]=c
+            dots[3]=c if ot else _GREY; dots[4]=c if so else _GREY
         return dots
-    idx={"P1":0,"P2":1,"P3":2,"OT":3,"SO":4}.get(plabel or "",0)
+    idx={"P1":0,"P2":1,"P3":2,"OT":3,"SO":4}.get(pkey or "",0)
     for i in range(5):
         if i<idx:
             if pscores and i<len(pscores):
@@ -229,25 +240,29 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     W,H=32,32
     img=Image.new("RGB",(W,H),(0,0,0)); px=img.load()
 
-    cur=data.get("current") or {}
-    prev=data.get("previous") or {}
-    nxt=data.get("next") or {}
+    cur=data.get("current") or None
+    prev=data.get("previous") or None
+    nxt=data.get("next") or None
 
-    live=bool(cur.get("is_live")); done=bool(cur.get("is_completed"))
+    live=bool((cur or {}).get("is_live")); done=bool((cur or {}).get("is_completed"))
 
     if cur:
         ht=cur.get("home_team") or team_name; at=cur.get("away_team") or "???"
         hs=int(cur.get("home_score") or 0); as_=int(cur.get("away_score") or 0)
-        plabel=cur.get("period_label") or ""; clock=cur.get("period_clock") or ""
+        pkey=cur.get("period") or ""; plabel=cur.get("period_label") or ""; clock=cur.get("period_clock") or ""
         ot=bool(cur.get("is_overtime")); so=bool(cur.get("is_shootout"))
         won=cur.get("won"); goals=cur.get("goals") or []; lg=cur.get("last_goal") or {}
+        pscores_raw=cur.get("period_scores") or ""
     elif prev:
+        done=True  # previous game is always completed
         ht=prev.get("home_team") or team_name; at=prev.get("away_team") or "???"
         hs=int(prev.get("home_score") or 0); as_=int(prev.get("away_score") or 0)
-        plabel=""; clock=""; ot=bool(prev.get("overtime")); so=bool(prev.get("shootout"))
+        pkey=""; plabel=""; clock=""; ot=bool(prev.get("overtime")); so=bool(prev.get("shootout"))
         won=prev.get("won"); goals=[]; lg={}
+        pscores_raw=prev.get("period_scores") or ""
     else:
-        ht=team_name; at="???"; hs=as_=0; plabel=clock=""; ot=so=False; won=None; goals=[]; lg={}
+        ht=team_name; at="???"; hs=as_=0; pkey=plabel=clock=""; ot=so=False; won=None; goals=[]; lg={}
+        pscores_raw=""
 
     hslug=_slug(ht); aslug=_slug(at)
     hp,hs_c,ha=_colors(hslug); ap,as_c,aa=_colors(aslug)
@@ -281,7 +296,10 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     _txtr(px,str(as_),W,8,score_col,W,H)
 
     # ── Zone 3 rows 16-23: Clock / info ──────────────────────────────────
-    if live and clock:
+    showing_prev_only = bool(prev) and not cur  # latest result – no zone 3 text
+    if showing_prev_only:
+        pass  # score + dots only; no third row
+    elif live and clock:
         _txtc(px,clock,19,_WHITE,W,H)
     elif live and plabel:
         pass
@@ -297,7 +315,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
                 _txtc(px,dt.strftime("%H:%M"),19,_GREY,W,H)
             except Exception:
                 pass
-    elif nxt:
+    elif nxt and not showing_prev_only:
         dt_str=nxt.get("datetime") or ""
         if dt_str:
             try:
@@ -307,8 +325,18 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
                 pass
 
     # ── Zone 4 rows 24-31: Period dots ───────────────────────────────────
+    # Parse period_scores string "(h-a, h-a, ...)" → [(h,a), ...]
+    pscores=None
+    if pscores_raw and pscores_raw.startswith("("):
+        parts=[p.strip().rstrip(")") for p in pscores_raw.strip("()").split(",")]
+        parsed=[]
+        for p in parts:
+            if "-" in p:
+                try: h,a=p.split("-",1); parsed.append((int(h),int(a)))
+                except ValueError: pass
+        if parsed: pscores=parsed
     # 5 dots at x positions: 3, 9, 15, 21, 27  (cy=29)
-    dot_cols=_dot_colors(plabel,live,done,won,ot,so,None)
+    dot_cols=_dot_colors(pkey,live,done,won,ot,so,pscores)
     for i,dc in enumerate(dot_cols):
         _dot(px,3+i*6,29,dc,W,H)
 
