@@ -14,6 +14,7 @@ from __future__ import annotations
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -53,6 +54,13 @@ class _HockeySensor(CoordinatorEntity, SensorEntity):
         self._slug = slug
         self._attr_unique_id = f"{slug}_{key}"
         self._attr_has_entity_name = True
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, slug)},
+            name=team,
+            manufacturer="swehockey.se",
+            model="HockeyLive Team",
+            entry_type=DeviceEntryType.SERVICE,
+        )
 
     @property
     def available(self) -> bool:
@@ -66,7 +74,7 @@ class _HockeySensor(CoordinatorEntity, SensorEntity):
 class HockeyNextMatchSensor(_HockeySensor):
     def __init__(self, coordinator, team, slug):
         super().__init__(coordinator, team, slug, "next_match")
-        self._attr_name = f"{team} – Nästa match"
+        self._attr_name = "Nästa match"
         self._attr_icon = "mdi:hockey-sticks"
 
     @property
@@ -100,7 +108,7 @@ class HockeyNextMatchSensor(_HockeySensor):
 class HockeyLastResultSensor(_HockeySensor):
     def __init__(self, coordinator, team, slug):
         super().__init__(coordinator, team, slug, "last_result")
-        self._attr_name = f"{team} – Senaste resultat"
+        self._attr_name = "Senaste resultat"
         self._attr_icon = "mdi:scoreboard"
 
     @property
@@ -145,7 +153,7 @@ class HockeyLastResultSensor(_HockeySensor):
 class HockeyLiveScoreSensor(_HockeySensor):
     def __init__(self, coordinator, team, slug):
         super().__init__(coordinator, team, slug, "live_score")
-        self._attr_name = f"{team} – Live score"
+        self._attr_name = "Live score"
         self._attr_icon = "mdi:hockey-puck"
 
     @property
@@ -188,7 +196,7 @@ class HockeyLiveScoreSensor(_HockeySensor):
 class HockeyPeriodSensor(_HockeySensor):
     def __init__(self, coordinator, team, slug):
         super().__init__(coordinator, team, slug, "period")
-        self._attr_name = f"{team} – Period"
+        self._attr_name = "Period"
         self._attr_icon = "mdi:timer-outline"
 
     @property

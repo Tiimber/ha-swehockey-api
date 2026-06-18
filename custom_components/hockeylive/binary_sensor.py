@@ -9,6 +9,7 @@ from __future__ import annotations
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -39,8 +40,15 @@ class HockeyIsLiveSensor(CoordinatorEntity, BinarySensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{slug}_is_live"
-        self._attr_name = f"{team} – Spelar nu"
+        self._attr_name = "Spelar nu"
         self._attr_icon = "mdi:broadcast"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, slug)},
+            name=team,
+            manufacturer="swehockey.se",
+            model="HockeyLive Team",
+            entry_type=DeviceEntryType.SERVICE,
+        )
 
     @property
     def available(self) -> bool:
