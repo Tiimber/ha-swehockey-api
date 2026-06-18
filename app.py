@@ -1727,13 +1727,22 @@ async def teams_all():
     if all_season_ids:
         await _ensure_seasons_fresh(all_season_ids)
 
+    def _is_valid_team_name(name: str) -> bool:
+        if not name or len(name.strip()) < 3:
+            return False
+        if name.strip().isdigit():
+            return False
+        return True
+
     team_set: set[str] = set()
     for entry in _schedule_cache.values():
         for g in entry.get("games", []):
-            if g.get("home_team"):
-                team_set.add(g["home_team"])
-            if g.get("away_team"):
-                team_set.add(g["away_team"])
+            ht = g.get("home_team", "")
+            at = g.get("away_team", "")
+            if _is_valid_team_name(ht):
+                team_set.add(ht)
+            if _is_valid_team_name(at):
+                team_set.add(at)
 
     sorted_teams = sorted(team_set)
     return {"teams": ["demo"] + sorted_teams}
