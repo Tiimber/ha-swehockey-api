@@ -1708,3 +1708,81 @@ async def team_now(team: str):
         "current": current_data,
         "next": _next_dict(next_game) if next_game else None,
     }
+
+
+@app.get("/teams/all")
+async def teams_all():
+    """All unique team names across every cached season — for config-flow step 1."""
+    leagues_data = scraper._leagues_cache.get("data") or []
+    if not leagues_data:
+        await asyncio.to_thread(scraper.fetch_leagues)
+        leagues_data = scraper._leagues_cache.get("data") or []
+
+    all_season_ids = [
+        sub["season_id"]
+        for lg in leagues_data
+        for sub in lg.get("sub_competitions", [])
+        if sub.get("season_id")
+    ]
+    if all_season_ids:
+        await _ensure_seasons_fresh(all_season_ids)
+
+    team_set: set[str] = set()
+    for entry in _schedule_cache.values():
+        for g in entry.get("games", []):
+            if g.get("home_team"):
+                team_set.add(g["home_team"])
+            if g.get("away_team"):
+                team_set.add(g["away_team"])
+
+    sorted_teams = sorted(team_set)
+    return {"teams": ["demo"] + sorted_teams}
+
+
+@app.get("/team/{team}/leagues")
+async def team_leagues(team: str):
+    """All sub-competitions where *team* has at least one game."""
+    if team.lower() == "demo":
+        return {
+            "team": "demo",
+            "competitions": [
+                {"league": "Demo", "name": "Demo", "season_id": 0, "game_count": 5}
+            ],
+        }
+
+    leagues_data = scraper._leagues_cache.get("data") or []
+    if not leagues_data:
+        await asyncio.to_thread(scraper.fetch_leagues)
+        leagues_data = scraper._leagues_cache.get("data") or []
+
+    all_season_ids = [
+        sub["season_id"]
+        for lg in leagues_data
+        for sub in lg.get("sub_competitions", [])
+        if sub.get("season_id")
+    ]
+    if all_season_ids:
+        await _ensure_seasons_fresh(all_season_ids)
+
+    team_lower = team.lower()
+    competitions: list[dict] = []
+    for lg in leagues_data:
+        for sub in lg.get("sub_competitions", []):
+            sid = sub.get("season_id")
+            if not sid:
+                continue
+            entry = _schedule_cache.get(sid, {})
+            count = sum(
+                1 for g in entry.get("games", [])
+                if (g.get("home_team") or "").lower() == team_lower
+                or (g.get("away_team") or "").lower() == team_lower
+            )
+            if count > 0:
+                competitions.append({
+                    "league": lg["league"],
+                    "name": sub["name"],
+                    "season_id": sid,
+                    "game_count": count,
+                })
+
+    return {"team": team, "competitions": competitions}
