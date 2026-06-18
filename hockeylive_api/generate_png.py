@@ -282,11 +282,9 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
 
     # ── Zone 3 rows 16-23: Clock / info ──────────────────────────────────
     if live and clock:
-        # Show "P2 14:32" style
-        info=f"{plabel} {clock}".strip() if plabel else clock
-        _txtc(px,info,17,_WHITE,W,H)
+        _txtc(px,clock,17,_WHITE,W,H)
     elif live and plabel:
-        _txtc(px,plabel,17,_WHITE,W,H)
+        pass
     elif done and (ot or so):
         suffix="SO" if so else "OT"
         _txtc(px,suffix,17,_GOLD,W,H)
