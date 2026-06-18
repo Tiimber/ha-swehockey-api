@@ -1921,110 +1921,149 @@ def _demo_now() -> dict:
     }
 
 
+# Sorted checkpoint list: every "interesting" sim_minute value the demo cycles through.
+# Each 15-second real tick advances to the next checkpoint in this list.
+_DEMO_CHECKPOINTS: list[float] = sorted([
+    # Week boundaries / day starts
+    0, 600, 1440, 2880, 4320, 5760, 7200, 8640, 10080,
+    # Game 0 (Mon 19:00, start_min=1140)
+    1020,   # pregame opens (-2h)
+    1100,   # pregame mid
+    1140,   # kickoff / P1 start
+    1148,   # goal 0-1
+    1150,   # penalty
+    1153.7, # goal 0-2
+    1160,   # P1 end / P2 start
+    1160.8, # goal 1-2
+    1175,   # penalty
+    1180,   # P2 end / P3 start
+    1186.7, # goal 1-3
+    1193.3, # goal 1-4
+    1200,   # P3 end / game end
+    1300,   # post-game results
+    # Game 1 (Thu 19:00, start_min=5460)
+    5000,   # idle approaching
+    5340,   # pregame opens (-2h)
+    5430,   # pregame mid
+    5460,   # kickoff / P1 start
+    5465.2, # goal 0-1
+    5472.5, # goal 1-1
+    5475,   # penalty
+    5478.3, # goal 1-2
+    5480,   # P1 end / P2 start
+    5484.2, # goal 2-2
+    5488.3, # goal 2-3
+    5491.7, # penalty
+    5496.7, # goal 3-3
+    5500,   # P2 end / P3 start
+    5503.3, # goal 3-4
+    5511.7, # goal 3-5
+    5520,   # P3 end / game end
+    5620,   # post-game results
+    # Game 2 (Sun 15:55, start_min=9555)
+    9000,   # idle approaching
+    9435,   # pregame opens (-2h)
+    9555,   # kickoff / P1 start
+    9565,   # goal 1-0
+    9568.3, # penalty
+    9575,   # P1 end / P2 start
+    9580,   # goal 1-1
+    9595,   # P2 end / P3 start (duplicate removed by sorted+set)
+    9603.3, # penalty
+    9608.3, # goal 2-2
+    9615,   # P3 end / OT start
+    9625,   # OT end / SO start
+    9627,   # SO end / game end
+    9700,   # post-game results
+])
+# Deduplicate while preserving order
+_DEMO_CHECKPOINTS = sorted(set(_DEMO_CHECKPOINTS))
+
+
+def _demo_derive_game_state(sim: float) -> None:
+    """Update game_clock_seconds / period_index / in_period_break / game_completed / game_index
+    in _demo_state to match the given sim_minutes value."""
+    global _demo_state
+    st = _demo_state
+
+    # Find which game sim falls inside (or just ended)
+    active_game = None
+    for g in _DEMO_GAMES:
+        gstart = g["start_min"]
+        gdur = 75 if not g.get("overtime") else 95
+        gend = gstart + gdur
+        if gstart <= sim <= gend:
+            active_game = g
+            break
+
+    if active_game is None:
+        # Not in a game — clear live state
+        st["game_clock_seconds"] = None
+        st["in_period_break"] = False
+        # Keep game_index / game_completed so _demo_now can show results
+        return
+
+    g = active_game
+    gstart = g["start_min"]
+    elapsed_sec = (sim - gstart) * 60.0  # total seconds since kickoff
+
+    # Determine period and clock from elapsed seconds
+    # Period durations: P1=1200s, P2=1200s, P3=1200s, OT=600s, SO=~0
+    period_boundaries = [0, 1200, 2400, 3600]
+    if g.get("overtime") or g.get("shootout"):
+        period_boundaries.append(4200)  # OT end
+    if g.get("shootout"):
+        period_boundaries.append(4200)  # SO (instant)
+
+    pidx = 0
+    gc = elapsed_sec
+    in_break = False
+    completed = False
+
+    # Walk through periods
+    cumulative = 0
+    for i, dur in enumerate([1200, 1200, 1200, 600, 0]):
+        period_start = cumulative
+        period_end = cumulative + dur
+        max_period = 4 if g.get("shootout") else (3 if g.get("overtime") else 2)
+        if i > max_period:
+            break
+        if elapsed_sec <= period_end:
+            pidx = i
+            gc = elapsed_sec - period_start
+            if i == max_period and gc >= dur:
+                completed = True
+                gc = float(dur)
+            break
+        cumulative = period_end
+    else:
+        # Past all periods
+        completed = True
+        pidx = 4 if g.get("shootout") else (3 if g.get("overtime") else 2)
+        gc = float(_PERIOD_DUR.get(pidx, 0))
+
+    st["game_index"] = g["idx"]
+    st["period_index"] = pidx
+    st["game_clock_seconds"] = gc
+    st["in_period_break"] = in_break
+    st["game_completed"] = completed
+
+
 def _demo_advance_time(rng: "_random.Random") -> None:
-    """Mutate _demo_state to advance simulated time by one tick."""
+    """Advance sim_minutes to the next checkpoint in _DEMO_CHECKPOINTS, then derive game state."""
     global _demo_state
     st = _demo_state
     sim = st["sim_minutes"]
     WEEK = _DEMO_WEEK_MINUTES
 
-    PRE_GAME_WINDOW_MIN = 120
+    # Find next checkpoint strictly greater than current sim
+    next_cp = next((cp for cp in _DEMO_CHECKPOINTS if cp > sim), None)
+    if next_cp is None:
+        # Past last checkpoint — wrap to start
+        next_cp = _DEMO_CHECKPOINTS[0]
 
-    # Find which game we're in/near
-    active_game = None
-    phase = "idle"
-    for g in _DEMO_GAMES:
-        gstart = g["start_min"]
-        gdur = 75 if not g.get("overtime") else 95
-        gend = gstart + gdur
-        if gstart - PRE_GAME_WINDOW_MIN <= sim < gstart:
-            active_game = g
-            phase = "pregame"
-            break
-        if gstart <= sim < gend:
-            active_game = g
-            phase = "live"
-            break
-
-    if phase == "idle":
-        # Check if we're close to a pregame window
-        for g in _DEMO_GAMES:
-            gstart = g["start_min"]
-            if sim < gstart - PRE_GAME_WINDOW_MIN:
-                # How far to pregame?
-                dist = gstart - PRE_GAME_WINDOW_MIN - sim
-                if dist <= 120:
-                    # Within 2h of pregame start: advance 15 min
-                    st["sim_minutes"] = (sim + 15) % WEEK
-                else:
-                    st["sim_minutes"] = (sim + 120) % WEEK
-                return
-        # Past all games this week
-        st["sim_minutes"] = (sim + 120) % WEEK
-        return
-
-    if phase == "pregame":
-        gstart = active_game["start_min"]
-        dist_to_start = gstart - sim
-        if dist_to_start > 120:
-            st["sim_minutes"] = sim + 120
-        else:
-            st["sim_minutes"] = sim + 15
-        # Reset game clock when we hit game start
-        if st["sim_minutes"] >= gstart:
-            st["sim_minutes"] = float(gstart)
-            st["game_clock_seconds"] = 0.0
-            st["period_index"] = 0
-            st["in_period_break"] = False
-            st["game_completed"] = False
-            st["game_index"] = active_game["idx"]
-        return
-
-    if phase == "live":
-        g = active_game
-        pidx = st.get("period_index") or 0
-        gc = st.get("game_clock_seconds") or 0.0
-        in_break = st.get("in_period_break") or False
-        completed = st.get("game_completed") or False
-
-        if completed:
-            # Game done, advance wall time
-            st["sim_minutes"] = (sim + 120) % WEEK
-            return
-
-        if in_break:
-            # One tick in break, then start next period
-            st["in_period_break"] = False
-            st["game_clock_seconds"] = 0.0
-            return
-
-        # Advance game clock by random 5-10 minutes
-        chunk = rng.uniform(5 * 60, 10 * 60)
-        period_dur = _PERIOD_DUR.get(pidx, 1200)
-
-        if pidx == 4:
-            # Shootout: one tick then complete
-            st["game_completed"] = True
-            st["sim_minutes"] = sim + 2  # small wall advance
-            return
-
-        new_gc = gc + chunk
-        if new_gc >= period_dur:
-            # Period ended
-            max_period = 4 if g.get("shootout") else (3 if g.get("overtime") else 2)
-            if pidx >= max_period:
-                # Game over
-                st["game_clock_seconds"] = float(period_dur)
-                st["game_completed"] = True
-                st["sim_minutes"] = sim + 2
-            else:
-                # Enter break
-                st["game_clock_seconds"] = float(period_dur)
-                st["in_period_break"] = True
-                st["period_index"] = pidx + 1
-        else:
-            st["game_clock_seconds"] = new_gc
-            st["sim_minutes"] = sim + chunk / 60  # keep wall time in sync
+    st["sim_minutes"] = next_cp % WEEK
+    _demo_derive_game_state(st["sim_minutes"])
 
 
 @app.get("/team/{team}/now")
