@@ -81,9 +81,14 @@ class HockeyNextMatchSensor(_HockeySensor):
     def native_value(self) -> str | None:
         if not self.coordinator.data:
             return None
-        game = self.coordinator.data.get("next")
+        data = self.coordinator.data
+        game = data.get("next")
         if not game:
             return None
+        # Use minutes_until as state so it updates every poll; fall back to datetime
+        mu = data.get("minutes_until")
+        if mu is not None:
+            return str(mu)
         return game.get("datetime") or None
 
     @property
@@ -93,6 +98,7 @@ class HockeyNextMatchSensor(_HockeySensor):
         if not game:
             return {}
         attrs = {
+            "datetime":      game.get("datetime"),
             "opponent":      game.get("opponent"),
             "venue":         game.get("venue"),
             "is_home":       game.get("is_home"),
@@ -119,14 +125,19 @@ class HockeyLastResultSensor(_HockeySensor):
     def native_value(self) -> str | None:
         if not self.coordinator.data:
             return None
-        game = self.coordinator.data.get("previous")
+        data = self.coordinator.data
+        game = data.get("previous")
         if not game:
             return None
         sf = game.get("score_for")
         sa = game.get("score_against")
         if sf is None or sa is None:
             return None
-        return f"{sf}–{sa}"
+        score = f"{sf}–{sa}"
+        ma = data.get("minutes_ago")
+        if ma is not None:
+            return f"{score} ({ma}m)"
+        return score
 
     @property
     def extra_state_attributes(self) -> dict:
