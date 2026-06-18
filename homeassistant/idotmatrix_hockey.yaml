@@ -5,66 +5,74 @@
 # image.demo_scoreboard_32x32 entity updates.
 #
 # HOW IT WORKS:
-#   1. Trigger fires on image.demo_scoreboard_32x32 state change.
-#   2. shell_command downloads the PNG from the HA image proxy into
-#      /config/www/idotmatrix/hockey_scoreboard.png  (/local/idotmatrix/...)
-#   3. idotmatrix.set_face is called with an image layer pointing at that file.
-#      The coordinator resolves "hockey_scoreboard.png" relative to
-#      config/www/idotmatrix/ (its default base_www path).
+#   Triggers on image.demo_scoreboard_32x32 state change (timestamp changes
+#   each time the image is regenerated). Calls idotmatrix.set_face with an
+#   icon layer that fetches the PNG directly from the HA image proxy via
+#   loopback HTTP. A cache-busting ?t=<unix_timestamp> query param is appended
+#   so the iDotMatrix coordinator never serves a stale cached image.
+#
+# NO shell_command, no www/ folder, no extra setup required.
 #
 # SETUP:
-#   1. Create the directory on your HA host:
-#        mkdir -p /config/www/idotmatrix
-#   2. Add to configuration.yaml:
-#        shell_command:
-#          idotmatrix_fetch_scoreboard: >
-#            curl -sf -o /config/www/idotmatrix/hockey_scoreboard.png
-#            "http://127.0.0.1:8123/api/image_proxy/image.demo_scoreboard_32x32?token=c2eb3e7f5750b22e621a80e9a09cbdd63d7e54574a1e16c4313a186773ca302d"
-#   3. Place this file in config/packages/idotmatrix_hockey.yaml
-#      (requires packages support in configuration.yaml — see matrix32_hockey.yaml header)
+#   This automation is deployed directly to automations.yaml via the HA REST
+#   API. The YAML here is for reference / re-deployment only.
 #
-# NOTE: The access_token in the curl URL is the static image-proxy token for
-#       image.demo_scoreboard_32x32. It does not expire. If you recreate the
-#       entity, update the token from Developer Tools → States.
+#   To re-deploy via REST API:
+#     POST http://<HA_HOST>:8123/api/config/automation/config/idotmatrix_hockey_push_image
+#     Authorization: Bearer <token>
+#     Content-Type: application/json
+#     Body: see action below (JSON equivalent)
+#
+#   Then reload: POST /api/services/automation/reload
+#
+# ENTITY IDs (adjust if your setup differs):
+#   image.demo_scoreboard_32x32   – HockeyLive scoreboard image entity
+#   automation entity created:    – automation.idotmatrix_push_hockey_scoreboard_on_image_update
+#
+# IMAGE PROXY TOKEN:
+#   The access_token below is the static image-proxy token for
+#   image.demo_scoreboard_32x32. It does not expire. If you recreate the
+#   entity, update the token from Developer Tools → States.
+#   Current token: c2eb3e7f5750b22e621a80e9a09cbdd63d7e54574a1e16c4313a186773ca302d
 # =============================================================================
 
+# NOTE: This file is reference-only. The live automation lives in automations.yaml
+# on the HA host (managed via HA UI / REST API). If you use packages, you can
+# adapt this block — but remove the automation from automations.yaml first to
+# avoid duplicates.
+
 automation:
-  - alias: "iDotMatrix – Push hockey scoreboard on image update"
+  - alias: "iDotMatrix \u2013 Push hockey scoreboard on image update"
     id: idotmatrix_hockey_push_image
     description: >
-      Downloads the latest 32x32 PNG scoreboard and sends it to the iDotMatrix
-      display whenever image.demo_scoreboard_32x32 is updated.
+      Sends the 32x32 PNG scoreboard to the iDotMatrix display whenever
+      image.demo_scoreboard_32x32 updates. Uses an icon layer with a
+      cache-busting timestamp so the coordinator fetches a fresh image each time.
 
     trigger:
       - platform: state
         entity_id: image.demo_scoreboard_32x32
 
     condition:
-      # Only act when the state actually changed (not just attribute refresh)
+      # Only act when the timestamp state actually changed (new image rendered)
       - condition: template
         value_template: >
           {{ trigger.from_state.state != trigger.to_state.state }}
 
     action:
-      # Step 1: Download the fresh PNG to www/idotmatrix/ so the coordinator
-      #         can read it from disk (avoids the icon-cache problem with HTTP URLs).
-      - service: shell_command.idotmatrix_fetch_scoreboard
-
-      # Brief pause to ensure the file is flushed before the coordinator reads it.
-      - delay: "00:00:01"
-
-      # Step 2: Push the image layer to the iDotMatrix display.
-      #         set_face applies to all loaded iDotMatrix coordinators.
-      #         The coordinator resolves "hockey_scoreboard.png" relative to
-      #         config/www/idotmatrix/ automatically.
+      # Push the PNG to the iDotMatrix display via set_face.
+      # icon_template is evaluated by the coordinator as a Jinja2 template,
+      # so now().timestamp() produces a unique URL each call → no cache hit.
       - service: idotmatrix.set_face
         data:
           face:
             layers:
               - id: "scoreboard"
-                type: image
-                image_path: "hockey_scoreboard.png"
+                type: icon
+                icon_template: >-
+                  http://127.0.0.1:8123/api/image_proxy/image.demo_scoreboard_32x32?token=c2eb3e7f5750b22e621a80e9a09cbdd63d7e54574a1e16c4313a186773ca302d&t={{ now().timestamp() | int }}
+                icon_size: 32
                 x: 0
                 y: 0
-                width: 32
-                height: 32
+
+    mode: single
