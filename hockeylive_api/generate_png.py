@@ -281,6 +281,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     _txtr(px,str(as_),W,8,score_col,W,H)
 
     # ── Zone 3 rows 16-23: Clock / info ──────────────────────────────────
+    showing_prev_only = bool(prev) and not cur  # latest result – no zone 3 text
     if live and clock:
         _txtc(px,clock,19,_WHITE,W,H)
     elif live and plabel:
@@ -297,7 +298,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
                 _txtc(px,dt.strftime("%H:%M"),19,_GREY,W,H)
             except Exception:
                 pass
-    elif nxt:
+    elif nxt and not showing_prev_only:
         dt_str=nxt.get("datetime") or ""
         if dt_str:
             try:
