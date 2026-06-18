@@ -21,11 +21,13 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._api_url: str = entry.data["api_url"]
         self._team: str = entry.data["team"]
+        # Demo always polls at live rate; real teams start idle and adjust after first fetch
+        initial_interval = UPDATE_INTERVAL_LIVE if self._team.lower() == "demo" else UPDATE_INTERVAL_IDLE
         super().__init__(
             hass,
             _LOGGER,
             name=f"HockeyLive – {self._team}",
-            update_interval=timedelta(seconds=UPDATE_INTERVAL_IDLE),
+            update_interval=timedelta(seconds=initial_interval),
         )
 
     async def _async_update_data(self) -> dict:
