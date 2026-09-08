@@ -141,6 +141,12 @@ _GREY   = ( 64, 64, 64)
 
 _TR = str.maketrans("åäöÅÄÖéüÜ","aaoAAOeuu")
 
+# Shortest slug allowed to take part in the prefix match below. Without a floor
+# an empty slug (e.g. from the "???" placeholder, which _slug reduces to "")
+# satisfies k.startswith(slug) for every key and silently resolves to whatever
+# team happens to sit first in the table.
+_FUZZY_MIN = 3
+
 def _slug(n:str)->str:
     s=n.translate(_TR).lower()
     s=unicodedata.normalize("NFKD",s).encode("ascii","ignore").decode()
@@ -151,7 +157,7 @@ def _h2rgb(h:str)->tuple:
 
 def _colors(slug:str):
     c=_TC.get(slug)
-    if not c:
+    if not c and len(slug)>=_FUZZY_MIN:
         for k,v in _TC.items():
             if slug.startswith(k) or k.startswith(slug): c=v; break
     if c:
@@ -161,8 +167,9 @@ def _colors(slug:str):
 def _abbr(slug:str)->str:
     v=_ABBR.get(slug)
     if v: return v
-    for k,w in _ABBR.items():
-        if slug.startswith(k) or k.startswith(slug): return w
+    if len(slug)>=_FUZZY_MIN:
+        for k,w in _ABBR.items():
+            if slug.startswith(k) or k.startswith(slug): return w
     letters=re.sub(r"[^a-z]","",slug)
     return letters[:4].upper() or "???"
 
@@ -261,7 +268,12 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
         won=prev.get("won"); goals=[]; lg={}
         pscores_raw=prev.get("period_scores") or ""
     else:
-        ht=team_name; at="???"; hs=as_=0; pkey=plabel=clock=""; ot=so=False; won=None; goals=[]; lg={}
+        # Nothing live and nothing played yet (e.g. before the season opens):
+        # name the next scheduled game's teams rather than a placeholder, and
+        # leave the scores blank because 0-0 would read as a played game.
+        src=nxt or {}
+        ht=src.get("home_team") or team_name; at=src.get("away_team") or "???"
+        hs=as_=None; pkey=plabel=clock=""; ot=so=False; won=None; goals=[]; lg={}
         pscores_raw=""
 
     hslug=_slug(ht); aslug=_slug(at)
@@ -285,7 +297,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     for i,c in enumerate(habbr):
         col=home_palette[i%len(home_palette)]
         _ch(px,c,x,0,col,W,H); x+=6
-    _txtr(px,str(hs),W,0,score_col,W,H)
+    if hs is not None: _txtr(px,str(hs),W,0,score_col,W,H)
 
     # ── Zone 2 rows 8-15: Away team name in alternating team colors ───────
     away_palette=[ap,as_c]+([aa] if aa else [])
@@ -293,7 +305,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     for i,c in enumerate(aabbr):
         col=away_palette[i%len(away_palette)]
         _ch(px,c,x,8,col,W,H); x+=6
-    _txtr(px,str(as_),W,8,score_col,W,H)
+    if as_ is not None: _txtr(px,str(as_),W,8,score_col,W,H)
 
     # ── Zone 3 rows 16-23: Clock / info ──────────────────────────────────
     showing_prev_only = bool(prev) and not cur  # latest result – no zone 3 text
