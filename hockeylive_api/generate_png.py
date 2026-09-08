@@ -45,7 +45,8 @@ _TC: dict[str, tuple] = {
     "huddinge_ik":("#CC0000","#FFFFFF",None), "huddinge":("#CC0000","#FFFFFF",None),
     "kalmar_hc":("#ac0e09","#ffffff","#f1da9e"), "kalmar":("#ac0e09","#ffffff","#f1da9e"),
     "troja_ljungby":("#dc2f34","#ffffff",None), "if_troja_ljungby":("#dc2f34","#ffffff",None), "troja":("#dc2f34","#ffffff",None),
-    "vimmerby_hc":("#fddd01","#2a2a2a","#ffffff"), "vimmerby_hockey":("#fddd01","#2a2a2a","#ffffff"), "vimmerby":("#fddd01","#2a2a2a","#ffffff"),
+    "vimmerby_hc":("#fddd01","#2a2a2a","#ffffff"), "vimmerby_hockey":("#fddd01","#2a2a2a","#ffffff"),
+    "visby_roma_hk":("#0d5eaa","#ffffff","#fddd01"), "visby_roma":("#0d5eaa","#ffffff","#fddd01"), "visby":("#0d5eaa","#ffffff","#fddd01"), "vimmerby":("#fddd01","#2a2a2a","#ffffff"),
     "ostersunds_ik":("#fded00","#006633",None), "ostersund":("#fded00","#006633",None),
 }
 _FALLBACK = ("#CC0000","#00AA00","#0000CC")
