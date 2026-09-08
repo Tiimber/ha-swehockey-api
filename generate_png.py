@@ -59,12 +59,12 @@ _ABBR: dict[str, str] = {
     "leksands_if":"LIF","leksand":"LIF","lif":"LIF",
     "linkoping_hc":"LHC","linkoping":"LHC","lhc":"LHC",
     "lulea_hf":"LHF","lulea":"LHF",
-    "malmo_redhawks":"MAL","if_malmo_redhawks":"MAL","malmo":"MAL",
+    "malmo_redhawks":"MIF","if_malmo_redhawks":"MIF","malmo":"MIF",
     "rogle_bk":"RBK","rogle":"RBK",
     "skelleftea_aik":"SAIK","skelleftea":"SAIK","saik":"SAIK",
     "timra_ik":"TIK","timra":"TIK",
     "vaxjo_lakers":"VLH","vaxjo":"VLH",
-    "orebro_hk":"OHK","orebro":"OHK",
+    "orebro_hk":"ÖRE","orebro":"ÖRE",
     "aik":"AIK","almtuna_is":"AIS","almtuna":"AIS",
     "bik_karlskoga":"BIK","karlskoga":"BIK",
     "if_bjorkloven":"IFB","bjorkloven":"IFB",
@@ -88,6 +88,14 @@ _ABBR: dict[str, str] = {
 
 # ── 5x7 font (bit4=leftmost) ──────────────────────────────────────────────────
 _F: dict[str, list[int]] = {
+    # Swedish accents. A regular glyph is 5x7 with its baseline on row 6, and
+    # there is no room above it, so the base letter is squeezed into rows 2-6
+    # and the diacritic takes the two rows that frees at the top. The ring on
+    # A-ring is drawn open at the bottom - a closed ring needs three rows,
+    # which would cost another row off the letter itself.
+    "\u00c5":[0b01110,0b01010,0b01110,0b10001,0b11111,0b10001,0b10001],
+    "\u00c4":[0b01010,0b00000,0b01110,0b10001,0b11111,0b10001,0b10001],
+    "\u00d6":[0b01010,0b00000,0b01110,0b10001,0b10001,0b10001,0b01110],
     "0":[0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
     "1":[0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
     "2":[0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111],
