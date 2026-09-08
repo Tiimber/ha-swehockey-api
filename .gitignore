@@ -44,3 +44,6 @@ config-*.yaml
 
 # Clinerules
 .clinerules
+
+# Runtime state (watchlist.json) bind-mounted into the container at /data
+data/

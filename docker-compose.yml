@@ -8,6 +8,10 @@ services:
       - "8080:8080"
     volumes:
       - ./config.yaml:/app/config.yaml:ro
+      # Watchlist persistence. Without this, watchlist.json is written inside
+      # the container and every `docker compose up --build` silently discards
+      # every watch (and with it the /team/{team}/... endpoints).
+      - ./data:/data
     environment:
       - HOCKEY_CONFIG=/app/config.yaml
 
