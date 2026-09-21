@@ -158,6 +158,8 @@ class HockeyLastResultSensor(_HockeySensor):
             "won":           game.get("won"),
             "overtime":      game.get("overtime"),
             "shootout":      game.get("shootout"),
+            "period_scores": game.get("period_scores"),
+            "periods":       game.get("periods"),
             "round":         game.get("round"),
         }
         if data.get("minutes_ago") is not None:
@@ -201,6 +203,8 @@ class HockeyLiveScoreSensor(_HockeySensor):
             "period_clock":     current.get("period_clock"),
             "is_overtime":      current.get("is_overtime"),
             "is_shootout":      current.get("is_shootout"),
+            "period_scores":    current.get("period_scores"),
+            "periods":          current.get("periods"),
             "venue":            current.get("venue"),
             "goals":            current.get("goals"),
             "last_goal":        current.get("last_goal"),

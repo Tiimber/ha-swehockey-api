@@ -126,6 +126,67 @@ def _cell_text(td) -> str:
     ).strip()
 
 
+# ---------------------------------------------------------------------------
+# Period scores
+# ---------------------------------------------------------------------------
+
+# Tokens swehockey may put in the period-score cell instead of a score pair.
+_PS_SO_TOKENS = {"SO", "PSO", "STRAFF", "STRAFFAR", "SHOOTOUT"}
+_PS_OT_TOKENS = {"OT", "OT5", "FLD", "FÖRL", "FORL", "OVERTIME", "SUDDEN DEATH"}
+
+_PS_PAIR_RE = re.compile(r"^(\d+)\s*[-–]\s*(\d+)$")
+
+
+def parse_period_scores(raw: Optional[str]) -> dict:
+    """Split a swehockey period-score string into per-period pairs and flags.
+
+    swehockey publishes several shapes for the same thing:
+
+        "(2-0, 1-3, 1-1)"       – regulation, three periods
+        "(2-0, 1-3, 1-1, 0-1)"  – a 4th pair IS the overtime period.  The string
+                                  carries no "OT" token at all, which is why
+                                  substring matching on "OT" misses these games.
+        "(1-0, 0-1, 1-1, 0-0, SO)" / "1-0,0-1,1-1,0-0,SO"
+                                – explicit shootout token as the last entry.
+
+    Returns ``{"periods": [(home, away), ...], "overtime": bool,
+    "shootout": bool, "regulation_periods": int}``.  A shootout always implies
+    overtime, since a game only reaches the shootout through it.
+    """
+    periods: list[tuple[int, int]] = []
+    overtime = False
+    shootout = False
+
+    for token in (raw or "").replace("(", "").replace(")", "").split(","):
+        token = token.strip()
+        if not token:
+            continue
+        m = _PS_PAIR_RE.match(token)
+        if m:
+            periods.append((int(m.group(1)), int(m.group(2))))
+            continue
+        upper = token.upper()
+        if any(t in upper for t in _PS_SO_TOKENS):
+            shootout = True
+        elif any(t in upper for t in _PS_OT_TOKENS):
+            overtime = True
+
+    # A 4th scoring period is overtime; a 5th is the shootout.
+    if len(periods) >= 4:
+        overtime = True
+    if len(periods) >= 5:
+        shootout = True
+    if shootout:
+        overtime = True
+
+    return {
+        "periods": periods,
+        "overtime": overtime,
+        "shootout": shootout,
+        "regulation_periods": min(len(periods), 3),
+    }
+
+
 def _parse_schedule(html: str, season_id: int) -> list[dict]:
     """
     Parse the schedule HTML page into a list of game dicts.

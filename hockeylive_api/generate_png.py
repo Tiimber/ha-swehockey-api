@@ -5,6 +5,12 @@ Layout (8 rows each):
   8–15  Away team strip  – abbr left, score right
  16–23  Clock / countdown / next-match date
  24–31  Period dots: P1 P2 P3 OT SO
+
+Finished games say the result with the dots alone - the number lit is how far
+the game went, the colour is who won: 3 green / 3 red won / lost in regulation,
+4 yellow / 4 orange won / lost in overtime, 5 yellow / 5 orange won / lost in
+the shootout.  Live games colour one dot per elapsed period (green won it,
+yellow tied it, red lost it) with blue on the period in progress.
 """
 from __future__ import annotations
 import io, re, unicodedata
@@ -147,6 +153,7 @@ _GOLD   = (255,215,  0)
 _BLUE   = ( 30,100,220)
 _GREEN  = (  0,200,  0)
 _RED    = (200,  0,  0)
+_ORANGE = (255, 90,  0)
 _GREY   = ( 64, 64, 64)
 
 _TR = str.maketrans("åäöÅÄÖéüÜ","aaoAAOeuu")
@@ -222,29 +229,37 @@ def _dot(px,cx:int,cy:int,col,W:int,H:int,sz:int=3)->None:
             if 0<=nx<W and 0<=ny<H: px[nx,ny]=col
 
 def _dot_colors(pkey:str,live:bool,done:bool,won,ot:bool,so:bool,pscores)->list:
+    """Colour the five period dots. `pscores` is (for, against) per period, from
+    the followed team's point of view - never home/away.
+
+    Finished game - how many dots are lit says how far the game went, their
+    colour says who won, so the two read together at a glance:
+        3 green  / 3 red     won / lost in regulation
+        4 yellow / 4 orange  won / lost in overtime
+        5 yellow / 5 orange  won / lost in the shootout
+    A dot colour is never mixed with another on a finished board, so the result
+    is legible without counting: green/red = settled in 60 minutes, yellow =
+    won it late, orange = lost it late.
+
+    Live game - one dot per elapsed period (green won it, yellow tied it, red
+    lost it) and blue on the period being played.  Positions not yet reached
+    stay dim grey, so the five-dot scale is visible at every stage.
+    """
     dots:list=list([_GREY]*5)
     if not live and not done: return dots
-    def rc(w): return _GREEN if w is True else (_RED if w is False else _YELLOW)
-    def pc(h,a): return _GREEN if h>a else (_RED if h<a else _YELLOW)
     if done:
-        if pscores:
-            reg=[pscores[i] if i<len(pscores) else None for i in range(3)]
-            for i,s in enumerate(reg):
-                dots[i]=pc(*s) if s else _GREY
-            if ot:
-                s=pscores[3] if len(pscores)>3 else None
-                dots[3]=pc(*s) if s else rc(won)
-            if so:
-                dots[4]=rc(won)
-        else:
-            c=rc(won); dots[0]=dots[1]=dots[2]=c
-            dots[3]=c if ot else _GREY; dots[4]=c if so else _GREY
+        if so:   lit,col=5,(_YELLOW if won else _ORANGE)
+        elif ot: lit,col=4,(_YELLOW if won else _ORANGE)
+        else:    lit,col=3,(_GREEN  if won else _RED)
+        # Completed but no verdict (score missing upstream): claim nothing.
+        if won is None: col=_WHITE
+        for i in range(lit): dots[i]=col
         return dots
     idx={"P1":0,"P2":1,"P3":2,"OT":3,"SO":4}.get(pkey or "",0)
     for i in range(5):
         if i<idx:
             if pscores and i<len(pscores):
-                ph,pa=pscores[i]; dots[i]=_GREEN if ph>pa else (_RED if ph<pa else _YELLOW)
+                pf,pa=pscores[i]; dots[i]=_GREEN if pf>pa else (_RED if pf<pa else _YELLOW)
             else: dots[i]=_GREY
         elif i==idx: dots[i]=_BLUE
         else: dots[i]=_GREY
@@ -260,6 +275,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     cur=data.get("current") or None
     prev=data.get("previous") or None
     nxt=data.get("next") or None
+    periods_payload=(cur or prev or {}).get("periods") or []
 
     live=bool((cur or {}).get("is_live")); done=bool((cur or {}).get("is_completed"))
 
@@ -289,6 +305,31 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     hslug=_slug(ht); aslug=_slug(at)
     hp,hs_c,ha=_colors(hslug); ap,as_c,aa=_colors(aslug)
     habbr=_abbr(hslug); aabbr=_abbr(aslug)
+
+    # The API serves a "periods" list already stated as for/against from the
+    # followed team's point of view; fall back to the raw "(h-a, h-a, ...)"
+    # string (older API builds) and flip it here when the team plays away.
+    pscores=None
+    if periods_payload:
+        try:
+            pscores=[(int(p["for"]),int(p["against"])) for p in periods_payload]
+        except (KeyError,TypeError,ValueError): pscores=None
+    if pscores is None and pscores_raw:
+        tslug=_slug(team_name)
+        team_is_home = True if tslug==hslug else (False if tslug==aslug else _abbr(tslug)!=aabbr)
+        parsed=[]
+        for p in [q.strip().strip("()") for q in pscores_raw.strip("()").split(",")]:
+            if "-" in p:
+                try: h,a=p.split("-",1); h,a=int(h),int(a)
+                except ValueError: continue
+                parsed.append((h,a) if team_is_home else (a,h))
+        if parsed: pscores=parsed
+    # swehockey writes an overtime period as a 4th score pair with no "OT"
+    # token anywhere, so the period count is the reliable signal.
+    if pscores:
+        if len(pscores)>=4: ot=True
+        if len(pscores)>=5: so=True
+    if so: ot=True
 
     # Goal flash: yellow score if last goal < 60s ago
     score_col=_WHITE
@@ -347,16 +388,6 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
                 pass
 
     # ── Zone 4 rows 24-31: Period dots ───────────────────────────────────
-    # Parse period_scores string – handles "(h-a, h-a)" and "h-a,h-a,SO" formats
-    pscores=None
-    if pscores_raw:
-        parts=[p.strip().strip("()") for p in pscores_raw.strip("()").split(",")]
-        parsed=[]
-        for p in parts:
-            if "-" in p:
-                try: h,a=p.split("-",1); parsed.append((int(h),int(a)))
-                except ValueError: pass
-        if parsed: pscores=parsed
     # 5 dots at x positions: 3, 9, 15, 21, 27  (cy=29)
     dot_cols=_dot_colors(pkey,live,done,won,ot,so,pscores)
     for i,dc in enumerate(dot_cols):

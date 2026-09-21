@@ -401,6 +401,9 @@ def _demo_status_payload() -> dict:
             "won": prv.get("won"),
             "opponent": prv.get("away_team") if (prv.get("home_team") or "").lower() == "demo fc" else prv.get("home_team"),
             "period_scores": prv.get("period_scores"),
+            "periods": prv.get("periods"),
+            "overtime": prv.get("overtime"),
+            "shootout": prv.get("shootout"),
         }
 
     return {
@@ -519,6 +522,32 @@ def _is_live(game: dict) -> bool:
     return 0 < delta < 14400 and not game["is_completed"]
 
 
+_PERIOD_KEYS = ["P1", "P2", "P3", "OT", "SO"]
+
+
+def _periods_payload(ps: dict, is_home: bool) -> list[dict]:
+    """Per-period breakdown, from the followed team's perspective.
+
+    ``ps`` is a scraper.parse_period_scores() result.  Every consumer that used
+    to re-split the raw ``period_scores`` string gets this instead, so the
+    period labels and win/loss verdicts are derived in exactly one place.
+    """
+    out: list[dict] = []
+    for i, (h, a) in enumerate(ps["periods"]):
+        for_, against = (h, a) if is_home else (a, h)
+        out.append(
+            {
+                "period": _PERIOD_KEYS[i] if i < len(_PERIOD_KEYS) else f"P{i + 1}",
+                "home": h,
+                "away": a,
+                "for": for_,
+                "against": against,
+                "result": "win" if for_ > against else ("loss" if for_ < against else "tie"),
+            }
+        )
+    return out
+
+
 def _game_to_dict(game: dict, cfg: dict) -> dict:
     """Serialize a game dict to JSON-safe dict, adding team perspective."""
     team = cfg["team"].lower()
@@ -533,6 +562,8 @@ def _game_to_dict(game: dict, cfg: dict) -> dict:
         won = score_for > score_against
 
     dt_iso = game["datetime"].isoformat() if game["datetime"] else None
+
+    ps = scraper.parse_period_scores(game.get("period_scores"))
 
     return {
         "game_id": game["game_id"],
@@ -551,13 +582,16 @@ def _game_to_dict(game: dict, cfg: dict) -> dict:
         "score_for": score_for,
         "score_against": score_against,
         "period_scores": game["period_scores"],
+        "periods": _periods_payload(ps, is_home),
+        "overtime": ps["overtime"],
+        "shootout": ps["shootout"],
         "won": won,
         "is_completed": game["is_completed"],
         "is_live": _is_live(game),
     }
 
 
-def _live_detail(game: dict) -> dict:
+def _live_detail(game: dict, is_home: Optional[bool] = None) -> dict:
     """
     Fetch game events and build a full live detail dict:
       period, period_clock, scores, goals, last_goal, penalties, active_penalties.
@@ -621,14 +655,24 @@ def _live_detail(game: dict) -> dict:
         "SO": "Straffar",
     }.get(period, period)
 
+    # The schedule page carries one period-score entry per *elapsed* period, so
+    # a live game can report its finished periods (and, once it gets there, its
+    # OT/SO status) even when the events page is unreachable.
+    ps = scraper.parse_period_scores(game.get("period_scores"))
+    if is_home is None:
+        _team = (cfg_module.get().get("team") or "").lower()
+        is_home = (game.get("home_team") or "").lower() == _team
+
     return {
         "period": period,
         "period_label": period_sv,
         "period_clock": period_clock,
         "home_score": home_score,
         "away_score": away_score,
-        "is_overtime": is_overtime,
-        "is_shootout": is_shootout,
+        "is_overtime": is_overtime or ps["overtime"] or period == "OT",
+        "is_shootout": is_shootout or ps["shootout"] or period == "SO",
+        "period_scores": game.get("period_scores"),
+        "periods": _periods_payload(ps, is_home),
         "goals": goals,
         "last_goal": last_goal,
         "penalties": penalties,
@@ -753,7 +797,7 @@ async def live_match():
     for g in _team_games(cfg["team"], cfg["season_ids"]):
         if _is_live(g):
             base = _game_to_dict(g, cfg)
-            detail = _live_detail(g)
+            detail = _live_detail(g, base["is_home_game"])
             return {"status": "live", "game": {**base, **detail}}
 
     return JSONResponse(
@@ -784,7 +828,7 @@ async def status():
     live_game = next((g for g in games if _is_live(g)), None)
     live_data: dict = {"is_playing": False}
     if live_game:
-        live_data = {"is_playing": True, **_live_detail(live_game)}
+        live_data = {"is_playing": True, **_live_detail(live_game, (live_game["home_team"] or "").lower() == team.lower())}
         live_data["home_team"] = live_game["home_team"]
         live_data["away_team"] = live_game["away_team"]
         live_data["venue"] = live_game["venue"]
@@ -891,12 +935,10 @@ async def summary():
             "score_for": d["score_for"],
             "score_against": d["score_against"],
             "won": d["won"],
-            "overtime": bool(
-                g.get("period_scores") and "OT" in (g["period_scores"] or "")
-            ),
-            "shootout": bool(
-                g.get("period_scores") and "SO" in (g["period_scores"] or "")
-            ),
+            "overtime": d["overtime"],
+            "shootout": d["shootout"],
+            "period_scores": d["period_scores"],
+            "periods": d["periods"],
             "datetime": d["datetime_iso"],
             "venue": d["venue"],
             "round": d["round"],
@@ -936,11 +978,13 @@ async def summary():
             "period": None,
             "period_label": None,
             "period_clock": None,
-            "is_overtime": False,
-            "is_shootout": False,
+            "is_overtime": base["overtime"],
+            "is_shootout": base["shootout"],
+            "period_scores": base["period_scores"],
+            "periods": base["periods"],
         }
         if is_live_now:
-            detail = _live_detail(tg)
+            detail = _live_detail(tg, base["is_home_game"])
             current_data.update(
                 {
                     "home_score": detail["home_score"],
@@ -950,6 +994,8 @@ async def summary():
                     "period_clock": detail["period_clock"],
                     "is_overtime": detail["is_overtime"],
                     "is_shootout": detail["is_shootout"],
+                    "period_scores": detail["period_scores"],
+                    "periods": detail["periods"],
                 }
             )
 
@@ -1361,7 +1407,7 @@ async def watch_live(watch_id: str):
     for g in _team_games(team, season_ids):
         if _is_live(g):
             base = _game_to_dict(g, fake_cfg)
-            detail = _live_detail(g)
+            detail = _live_detail(g, base["is_home_game"])
             return {"watch_id": watch_id, "status": "live", "game": {**base, **detail}}
     return JSONResponse(
         status_code=404,
@@ -1410,7 +1456,7 @@ def _team_status_payload(team: str, season_ids: list[int], cfg: dict) -> dict:
     live_game = next((g for g in games if _is_live(g)), None)
     live_data: dict = {"is_playing": False}
     if live_game:
-        live_data = {"is_playing": True, **_live_detail(live_game)}
+        live_data = {"is_playing": True, **_live_detail(live_game, (live_game["home_team"] or "").lower() == team.lower())}
         live_data["home_team"] = live_game["home_team"]
         live_data["away_team"] = live_game["away_team"]
         live_data["venue"] = live_game["venue"]
@@ -1520,7 +1566,7 @@ async def team_live(team: str):
     for g in _team_games(team, season_ids):
         if _is_live(g):
             base = _game_to_dict(g, fake_cfg)
-            detail = _live_detail(g)
+            detail = _live_detail(g, base["is_home_game"])
             return {"status": "live", "game": {**base, **detail}}
     return JSONResponse(
         status_code=404,
@@ -1697,6 +1743,7 @@ def _demo_game_to_prev(game: dict, demo_team: str = "Demo FC") -> dict:
     score_for = h if is_home else a
     score_against = a if is_home else h
     won = score_for > score_against
+    _ps = scraper.parse_period_scores(game.get("period_scores"))
     return {
         "datetime": None,  # filled by caller
         "home_team": game["home"],
@@ -1706,11 +1753,12 @@ def _demo_game_to_prev(game: dict, demo_team: str = "Demo FC") -> dict:
         "score_for": score_for,
         "score_against": score_against,
         "won": won,
-        "overtime": game.get("overtime", False),
-        "shootout": game.get("shootout", False),
+        "overtime": game.get("overtime", False) or _ps["overtime"],
+        "shootout": game.get("shootout", False) or _ps["shootout"],
         "venue": game["venue"],
         "round": game["round"],
         "period_scores": game.get("period_scores"),
+        "periods": _periods_payload(_ps, is_home),
     }
 
 
@@ -1899,6 +1947,9 @@ def _demo_now() -> dict:
                 "penalties": all_pen, "active_penalties": active_pen,
                 "venue": g["venue"], "round": g["round"],
                 "period_scores": live_period_scores,
+                "periods": _periods_payload(
+                    scraper.parse_period_scores(live_period_scores), g["is_home"]
+                ),
             }
 
     # --- advance simulated time for next call ---
@@ -2137,11 +2188,12 @@ async def team_now(team: str):
             "score_for": d["score_for"],
             "score_against": d["score_against"],
             "won": d["won"],
-            "overtime": bool(g.get("period_scores") and "OT" in (g["period_scores"] or "")),
-            "shootout": bool(g.get("period_scores") and "SO" in (g["period_scores"] or "")),
+            "overtime": d["overtime"],
+            "shootout": d["shootout"],
             "venue": d["venue"],
             "round": d["round"],
-            "period_scores": g.get("period_scores"),
+            "period_scores": d["period_scores"],
+            "periods": d["periods"],
         }
 
     current_data: Optional[dict] = None
@@ -2169,8 +2221,12 @@ async def team_now(team: str):
             "period": None,
             "period_label": None,
             "period_clock": None,
-            "is_overtime": False,
-            "is_shootout": False,
+            # A game that finished earlier today is served from here rather than
+            # from "previous", so it needs the same OT/SO verdict.
+            "is_overtime": base["overtime"],
+            "is_shootout": base["shootout"],
+            "period_scores": base["period_scores"],
+            "periods": base["periods"],
             "goals": [],
             "last_goal": None,
             "penalties": [],
@@ -2179,7 +2235,7 @@ async def team_now(team: str):
             "round": base["round"],
         }
         if is_live_now:
-            detail = _live_detail(tg)
+            detail = _live_detail(tg, base["is_home_game"])
             current_data.update({
                 "home_score": detail["home_score"],
                 "away_score": detail["away_score"],
@@ -2188,6 +2244,8 @@ async def team_now(team: str):
                 "period_clock": detail["period_clock"],
                 "is_overtime": detail["is_overtime"],
                 "is_shootout": detail["is_shootout"],
+                "period_scores": detail["period_scores"],
+                "periods": detail["periods"],
                 "goals": detail.get("goals", []),
                 "last_goal": detail.get("last_goal"),
                 "penalties": detail.get("penalties", []),
@@ -2389,8 +2447,8 @@ async def team_png(team: str):
             return {"datetime": d["datetime_iso"], "home_team": d["home_team"], "away_team": d["away_team"],
                     "home_score": d["home_score"], "away_score": d["away_score"],
                     "score_for": d["score_for"], "score_against": d["score_against"],
-                    "won": d["won"], "overtime": bool(g.get("period_scores") and "OT" in (g["period_scores"] or "")),
-                    "shootout": bool(g.get("period_scores") and "SO" in (g["period_scores"] or ""))}
+                    "won": d["won"], "overtime": d["overtime"], "shootout": d["shootout"],
+                    "period_scores": d["period_scores"], "periods": d["periods"]}
 
         def _next_dict(g):
             d = _game_to_dict(g, fake_cfg)
@@ -2409,13 +2467,16 @@ async def team_png(team: str):
                             "home_score": tg["home_score"], "away_score": tg["away_score"],
                             "started": tg["datetime"] <= now, "is_live": is_live_now, "is_completed": is_done,
                             "won": won, "period": None, "period_label": None, "period_clock": None,
-                            "is_overtime": False, "is_shootout": False, "goals": [], "last_goal": None}
+                            "is_overtime": base["overtime"], "is_shootout": base["shootout"],
+                            "period_scores": base["period_scores"], "periods": base["periods"],
+                            "goals": [], "last_goal": None}
             if is_live_now:
-                detail = _live_detail(tg)
+                detail = _live_detail(tg, base["is_home_game"])
                 current_data.update({"home_score": detail["home_score"], "away_score": detail["away_score"],
                                      "period": detail["period"], "period_label": detail["period_label"],
                                      "period_clock": detail["period_clock"], "is_overtime": detail["is_overtime"],
-                                     "is_shootout": detail["is_shootout"], "goals": detail.get("goals", []),
+                                     "is_shootout": detail["is_shootout"], "period_scores": detail["period_scores"],
+                                     "periods": detail["periods"], "goals": detail.get("goals", []),
                                      "last_goal": detail.get("last_goal")})
 
         data = {"team": team, "previous": _prev_dict(previous_game) if previous_game else None,
