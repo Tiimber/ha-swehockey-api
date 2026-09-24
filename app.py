@@ -362,6 +362,8 @@ def _demo_status_payload() -> dict:
             "period": cur.get("period"),
             "period_label": cur.get("period_label"),
             "period_clock": cur.get("period_clock"),
+            "intermission": cur.get("intermission", False),
+            "game_state": cur.get("game_state"),
             "is_overtime": cur.get("is_overtime", False),
             "is_shootout": cur.get("is_shootout", False),
             "goals": cur.get("goals", []),
@@ -621,6 +623,8 @@ def _live_detail(game: dict, is_home: Optional[bool] = None) -> dict:
         home_score = events_data.get("home_score", game["home_score"] or 0)
         away_score = events_data.get("away_score", game["away_score"] or 0)
         period_clock = events_data.get("period_clock")
+        intermission = bool(events_data.get("intermission"))
+        game_state = events_data.get("game_state")
         is_overtime = events_data.get("is_overtime", False)
         is_shootout = events_data.get("is_shootout", False)
         goals = events_data.get("goals", [])
@@ -639,6 +643,8 @@ def _live_detail(game: dict, is_home: Optional[bool] = None) -> dict:
         home_score = game["home_score"] or 0
         away_score = game["away_score"] or 0
         period_clock = None
+        intermission = False
+        game_state = None
         is_overtime = False
         is_shootout = False
         goals = []
@@ -658,7 +664,12 @@ def _live_detail(game: dict, is_home: Optional[bool] = None) -> dict:
     # The schedule page carries one period-score entry per *elapsed* period, so
     # a live game can report its finished periods (and, once it gets there, its
     # OT/SO status) even when the events page is unreachable.
-    ps = scraper.parse_period_scores(game.get("period_scores"))
+    # The schedule page only carries period scores once the game is over; the
+    # events page header has them from the first intermission on.
+    period_scores_raw = game.get("period_scores") or (
+        events_data.get("period_scores_live") if events_data else None
+    )
+    ps = scraper.parse_period_scores(period_scores_raw)
     if is_home is None:
         _team = (cfg_module.get().get("team") or "").lower()
         is_home = (game.get("home_team") or "").lower() == _team
@@ -667,11 +678,13 @@ def _live_detail(game: dict, is_home: Optional[bool] = None) -> dict:
         "period": period,
         "period_label": period_sv,
         "period_clock": period_clock,
+        "intermission": intermission,
+        "game_state": game_state,
         "home_score": home_score,
         "away_score": away_score,
         "is_overtime": is_overtime or ps["overtime"] or period == "OT",
         "is_shootout": is_shootout or ps["shootout"] or period == "SO",
-        "period_scores": game.get("period_scores"),
+        "period_scores": period_scores_raw,
         "periods": _periods_payload(ps, is_home),
         "goals": goals,
         "last_goal": last_goal,
@@ -992,6 +1005,8 @@ async def summary():
                     "period": detail["period"],
                     "period_label": detail["period_label"],
                     "period_clock": detail["period_clock"],
+                    "intermission": detail.get("intermission", False),
+                    "game_state": detail.get("game_state"),
                     "is_overtime": detail["is_overtime"],
                     "is_shootout": detail["is_shootout"],
                     "period_scores": detail["period_scores"],
@@ -2242,6 +2257,8 @@ async def team_now(team: str):
                 "period": detail["period"],
                 "period_label": detail["period_label"],
                 "period_clock": detail["period_clock"],
+                "intermission": detail.get("intermission", False),
+                "game_state": detail.get("game_state"),
                 "is_overtime": detail["is_overtime"],
                 "is_shootout": detail["is_shootout"],
                 "period_scores": detail["period_scores"],
@@ -2475,6 +2492,7 @@ async def team_png(team: str):
                 current_data.update({"home_score": detail["home_score"], "away_score": detail["away_score"],
                                      "period": detail["period"], "period_label": detail["period_label"],
                                      "period_clock": detail["period_clock"], "is_overtime": detail["is_overtime"],
+                                     "intermission": detail.get("intermission", False), "game_state": detail.get("game_state"),
                                      "is_shootout": detail["is_shootout"], "period_scores": detail["period_scores"],
                                      "periods": detail["periods"], "goals": detail.get("goals", []),
                                      "last_goal": detail.get("last_goal")})

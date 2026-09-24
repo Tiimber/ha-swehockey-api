@@ -10,7 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, UPDATE_INTERVAL_DEMO, UPDATE_INTERVAL_LIVE, UPDATE_INTERVAL_GAME_DAY, UPDATE_INTERVAL_IDLE
+from .const import DOMAIN, UPDATE_INTERVAL_DEMO, UPDATE_INTERVAL_IDLE
+from .intervals import pick_update_interval
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,14 +49,9 @@ class HockeyLiveCoordinator(DataUpdateCoordinator):
             self.update_interval = timedelta(seconds=UPDATE_INTERVAL_DEMO)
             return data
 
-        current = data.get("current") or {}
-        if current.get("is_live"):
-            self.update_interval = timedelta(seconds=UPDATE_INTERVAL_LIVE)
-        elif current:
-            self.update_interval = timedelta(seconds=UPDATE_INTERVAL_GAME_DAY)
-        elif data.get("next") or data.get("previous"):
-            self.update_interval = timedelta(seconds=UPDATE_INTERVAL_GAME_DAY)
-        else:
-            self.update_interval = timedelta(seconds=UPDATE_INTERVAL_IDLE)
+        # Counts down to the moments that change the board – the pre-game
+        # promotion and face-off – instead of a flat hourly tick that made a
+        # 19:00 game go live on the panel at 19:40.
+        self.update_interval = timedelta(seconds=pick_update_interval(data))
 
         return data

@@ -228,7 +228,7 @@ def _dot(px,cx:int,cy:int,col,W:int,H:int,sz:int=3)->None:
             nx,ny=cx+dx,cy+dy
             if 0<=nx<W and 0<=ny<H: px[nx,ny]=col
 
-def _dot_colors(pkey:str,live:bool,done:bool,won,ot:bool,so:bool,pscores)->list:
+def _dot_colors(pkey:str,live:bool,done:bool,won,ot:bool,so:bool,pscores,intermission:bool=False)->list:
     """Colour the five period dots. `pscores` is (for, against) per period, from
     the followed team's point of view - never home/away.
 
@@ -243,7 +243,9 @@ def _dot_colors(pkey:str,live:bool,done:bool,won,ot:bool,so:bool,pscores)->list:
 
     Live game - one dot per elapsed period (green won it, yellow tied it, red
     lost it) and blue on the period being played.  Positions not yet reached
-    stay dim grey, so the five-dot scale is visible at every stage.
+    stay dim grey, so the five-dot scale is visible at every stage.  In an
+    intermission nothing is being played, so the period that just ended gets
+    its result colour and no dot is blue.
     """
     dots:list=list([_GREY]*5)
     if not live and not done: return dots
@@ -256,12 +258,13 @@ def _dot_colors(pkey:str,live:bool,done:bool,won,ot:bool,so:bool,pscores)->list:
         for i in range(lit): dots[i]=col
         return dots
     idx={"P1":0,"P2":1,"P3":2,"OT":3,"SO":4}.get(pkey or "",0)
+    if intermission: idx+=1
     for i in range(5):
         if i<idx:
             if pscores and i<len(pscores):
                 pf,pa=pscores[i]; dots[i]=_GREEN if pf>pa else (_RED if pf<pa else _YELLOW)
             else: dots[i]=_GREY
-        elif i==idx: dots[i]=_BLUE
+        elif i==idx and not intermission: dots[i]=_BLUE
         else: dots[i]=_GREY
     return dots
 
@@ -286,6 +289,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
         ot=bool(cur.get("is_overtime")); so=bool(cur.get("is_shootout"))
         won=cur.get("won"); goals=cur.get("goals") or []; lg=cur.get("last_goal") or {}
         pscores_raw=cur.get("period_scores") or ""
+        intermission=bool(cur.get("intermission"))
     elif prev:
         done=True  # previous game is always completed
         ht=prev.get("home_team") or team_name; at=prev.get("away_team") or "???"
@@ -293,6 +297,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
         pkey=""; plabel=""; clock=""; ot=bool(prev.get("overtime")); so=bool(prev.get("shootout"))
         won=prev.get("won"); goals=[]; lg={}
         pscores_raw=prev.get("period_scores") or ""
+        intermission=False
     else:
         # Nothing live and nothing played yet (e.g. before the season opens):
         # name the next scheduled game's teams rather than a placeholder, and
@@ -301,6 +306,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
         ht=src.get("home_team") or team_name; at=src.get("away_team") or "???"
         hs=as_=None; pkey=plabel=clock=""; ot=so=False; won=None; goals=[]; lg={}
         pscores_raw=""
+        intermission=False
 
     hslug=_slug(ht); aslug=_slug(at)
     hp,hs_c,ha=_colors(hslug); ap,as_c,aa=_colors(aslug)
@@ -362,10 +368,14 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     showing_prev_only = bool(prev) and not cur  # latest result – no zone 3 text
     if showing_prev_only:
         pass  # score + dots only; no third row
+    elif live and intermission:
+        # Between periods: the clock would be the last event's, hours stale.
+        _txtc(px,"PAUS",19,_WHITE,W,H)
     elif live and clock:
         _txtc(px,clock,19,_WHITE,W,H)
-    elif live and plabel:
-        pass
+    elif live and pkey:
+        # A period under way with no clock yet (no event in it so far).
+        _txtc(px,pkey,19,_WHITE,W,H)
     elif done and (ot or so):
         suffix="SO" if so else "OT"
         _txtc(px,suffix,19,_GOLD,W,H)
@@ -389,7 +399,7 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
 
     # ── Zone 4 rows 24-31: Period dots ───────────────────────────────────
     # 5 dots at x positions: 3, 9, 15, 21, 27  (cy=29)
-    dot_cols=_dot_colors(pkey,live,done,won,ot,so,pscores)
+    dot_cols=_dot_colors(pkey,live,done,won,ot,so,pscores,intermission)
     for i,dc in enumerate(dot_cols):
         _dot(px,3+i*6,29,dc,W,H)
 

@@ -780,9 +780,82 @@ def fetch_game_events(game_id: int) -> dict:
     return _parse_game_events(html)
 
 
+_STATE_PERIOD_RE = re.compile(r"(\d)(?:st|nd|rd|th)\s+period(\s+ended)?", re.I)
+_PAIRS_RE = re.compile(r"^\(\s*\d+-\d+(?:\s*,\s*\d+-\d+)*\s*\)$")
+_CLOCK_RE = re.compile(r"^\d{1,2}:\d{2}$")
+
+
+def _parse_info_area(soup) -> dict:
+    """Read the header's info cell, the only place the page states the game.
+
+    The events table says what happened last, not what is happening now: a
+    goal at 14:33 stayed on the board as "14:33" through the whole first
+    intermission. The `tdInfoArea` cell beside the score carries, as separate
+    divs, the score, the per-period pairs *including the period in progress*
+    ("(1-2, 0-0)"), the state ("1st period ended", "2nd period", "Final
+    Score") and then either the running clock of the current period ("01:28")
+    or the current powerplay ("Powerplay (5 on 4) for ÖHK (01:53)"). Sampled
+    live across five SHL games on 2026-09-24; overtime and shootout wording is
+    matched loosely because it was not seen that night.
+    """
+    out = {
+        "state_text": None,
+        "state_period": None,
+        "period_ended": False,
+        "is_final": False,
+        "live_clock": None,
+        "period_pairs": None,
+    }
+    info = soup.find("td", class_="tdInfoArea")
+    if not info:
+        return out
+    for div in info.find_all("div"):
+        text = re.sub(r"\s+", " ", div.get_text(" ", strip=True).replace("\xa0", " ")).strip()
+        if not text:
+            continue
+        low = text.lower()
+        m = _STATE_PERIOD_RE.search(text)
+        if m:
+            out["state_text"] = text
+            out["state_period"] = f"P{m.group(1)}"
+            out["period_ended"] = bool(m.group(2))
+        elif "final" in low:
+            out["state_text"] = text
+            out["is_final"] = True
+        elif "overtime" in low or low.startswith("ot"):
+            out["state_text"] = text
+            out["state_period"] = "OT"
+            out["period_ended"] = "ended" in low
+        elif "shootout" in low or "penalty shot" in low or low.startswith("straff"):
+            out["state_text"] = text
+            out["state_period"] = "SO"
+        elif _PAIRS_RE.match(text):
+            out["period_pairs"] = text
+        elif _CLOCK_RE.match(text) and out["live_clock"] is None:
+            out["live_clock"] = text
+    return out
+
+
+def _completed_pairs(info: dict) -> Optional[str]:
+    """The header's period pairs without the period still being played."""
+    raw = info.get("period_pairs")
+    if not raw:
+        return None
+    pairs = re.findall(r"\d+-\d+", raw)
+    in_progress = (
+        info.get("state_period")
+        and not info.get("period_ended")
+        and not info.get("is_final")
+    )
+    if in_progress and pairs:
+        pairs = pairs[:-1]
+    return f"({', '.join(pairs)})" if pairs else None
+
+
 def _parse_game_events(html: str) -> dict:
     """Parse the Game/Events HTML page into a structured result."""
     soup = BeautifulSoup(html, "lxml")
+    info = _parse_info_area(soup)
 
     # ── Score from page header ────────────────────────────────────────────
     header_score = re.search(r"(\d+)\s*[-–]\s*(\d+)", soup.get_text()[:2000])
@@ -888,6 +961,21 @@ def _parse_game_events(html: str) -> dict:
     if current_time_str and current_period:
         period_clock = _period_clock_str(current_game_secs, current_period)
 
+    # The page's own statement of the game outranks what the last event
+    # implies: the event list lags reality by a whole intermission, and says
+    # nothing at all until the first event of a new period.
+    intermission = False
+    if info["state_period"]:
+        event_period = current_period
+        current_period = info["state_period"]
+        intermission = info["period_ended"] and not info["is_final"]
+        if intermission:
+            period_clock = None
+        elif info["live_clock"]:
+            period_clock = info["live_clock"]
+        elif event_period != current_period:
+            period_clock = None
+
     # ── Classify events into goals / penalties ────────────────────────────
     goals, penalties = _classify_events(
         raw_events,
@@ -911,6 +999,9 @@ def _parse_game_events(html: str) -> dict:
         "away_score": away_score_total,
         "period": current_period,
         "period_clock": period_clock,
+        "intermission": intermission,
+        "game_state": info["state_text"],
+        "period_scores_live": _completed_pairs(info),
         "period_scores": [],
         "is_overtime": current_period == "OT",
         "is_shootout": current_period == "SO",

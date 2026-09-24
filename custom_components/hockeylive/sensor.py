@@ -201,6 +201,8 @@ class HockeyLiveScoreSensor(_HockeySensor):
             "period":           current.get("period"),
             "period_label":     current.get("period_label"),
             "period_clock":     current.get("period_clock"),
+            "intermission":     current.get("intermission"),
+            "game_state":       current.get("game_state"),
             "is_overtime":      current.get("is_overtime"),
             "is_shootout":      current.get("is_shootout"),
             "period_scores":    current.get("period_scores"),
