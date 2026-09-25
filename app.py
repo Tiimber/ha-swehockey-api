@@ -363,6 +363,7 @@ def _demo_status_payload() -> dict:
             "period_label": cur.get("period_label"),
             "period_clock": cur.get("period_clock"),
             "intermission": cur.get("intermission", False),
+            "is_final": cur.get("is_final", False),
             "game_state": cur.get("game_state"),
             "is_overtime": cur.get("is_overtime", False),
             "is_shootout": cur.get("is_shootout", False),
@@ -624,6 +625,7 @@ def _live_detail(game: dict, is_home: Optional[bool] = None) -> dict:
         away_score = events_data.get("away_score", game["away_score"] or 0)
         period_clock = events_data.get("period_clock")
         intermission = bool(events_data.get("intermission"))
+        is_final = bool(events_data.get("is_final"))
         game_state = events_data.get("game_state")
         is_overtime = events_data.get("is_overtime", False)
         is_shootout = events_data.get("is_shootout", False)
@@ -644,6 +646,7 @@ def _live_detail(game: dict, is_home: Optional[bool] = None) -> dict:
         away_score = game["away_score"] or 0
         period_clock = None
         intermission = False
+        is_final = False
         game_state = None
         is_overtime = False
         is_shootout = False
@@ -679,6 +682,7 @@ def _live_detail(game: dict, is_home: Optional[bool] = None) -> dict:
         "period_label": period_sv,
         "period_clock": period_clock,
         "intermission": intermission,
+        "is_final": is_final,
         "game_state": game_state,
         "home_score": home_score,
         "away_score": away_score,
@@ -1006,6 +1010,7 @@ async def summary():
                     "period_label": detail["period_label"],
                     "period_clock": detail["period_clock"],
                     "intermission": detail.get("intermission", False),
+                    "is_final": detail.get("is_final", False),
                     "game_state": detail.get("game_state"),
                     "is_overtime": detail["is_overtime"],
                     "is_shootout": detail["is_shootout"],
@@ -2258,6 +2263,7 @@ async def team_now(team: str):
                 "period_label": detail["period_label"],
                 "period_clock": detail["period_clock"],
                 "intermission": detail.get("intermission", False),
+                "is_final": detail.get("is_final", False),
                 "game_state": detail.get("game_state"),
                 "is_overtime": detail["is_overtime"],
                 "is_shootout": detail["is_shootout"],
@@ -2493,6 +2499,7 @@ async def team_png(team: str):
                                      "period": detail["period"], "period_label": detail["period_label"],
                                      "period_clock": detail["period_clock"], "is_overtime": detail["is_overtime"],
                                      "intermission": detail.get("intermission", False), "game_state": detail.get("game_state"),
+                                     "is_final": detail.get("is_final", False),
                                      "is_shootout": detail["is_shootout"], "period_scores": detail["period_scores"],
                                      "periods": detail["periods"], "goals": detail.get("goals", []),
                                      "last_goal": detail.get("last_goal")})

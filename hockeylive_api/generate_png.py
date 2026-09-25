@@ -281,6 +281,9 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
     periods_payload=(cur or prev or {}).get("periods") or []
 
     live=bool((cur or {}).get("is_live")); done=bool((cur or {}).get("is_completed"))
+    # The events page says "Game Finished" minutes before the schedule marks
+    # the game completed; the board should not keep a dead clock up meanwhile.
+    if live and (cur or {}).get("is_final"): done=True; live=False
 
     if cur:
         ht=cur.get("home_team") or team_name; at=cur.get("away_team") or "???"
@@ -290,6 +293,11 @@ def render(data:dict, team_name:str, now_utc:Optional[datetime]=None)->bytes:
         won=cur.get("won"); goals=cur.get("goals") or []; lg=cur.get("last_goal") or {}
         pscores_raw=cur.get("period_scores") or ""
         intermission=bool(cur.get("intermission"))
+        if done and won is None and hs!=as_:
+            # Finished on the events page but not yet on the schedule, which
+            # is where the verdict normally comes from: read it off the score.
+            we_are_home=_slug(ht)==_slug(team_name) or _abbr(_slug(ht))==_abbr(_slug(team_name))
+            won=(hs>as_) if we_are_home else (as_>hs)
     elif prev:
         done=True  # previous game is always completed
         ht=prev.get("home_team") or team_name; at=prev.get("away_team") or "???"

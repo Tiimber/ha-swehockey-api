@@ -783,6 +783,9 @@ def fetch_game_events(game_id: int) -> dict:
 _STATE_PERIOD_RE = re.compile(r"(\d)(?:st|nd|rd|th)\s+period(\s+ended)?", re.I)
 _PAIRS_RE = re.compile(r"^\(\s*\d+-\d+(?:\s*,\s*\d+-\d+)*\s*\)$")
 _CLOCK_RE = re.compile(r"^\d{1,2}:\d{2}$")
+# A note in the clock's place still ends with the clock: "Powerplay (5 on 4)
+# for HV71 (19:37)", "Time out for RBK (12:10)", "VÄX pulled goalie (18:53)".
+_TRAILING_CLOCK_RE = re.compile(r"\((\d{1,2}:\d{2})\)\s*$")
 
 
 def _parse_info_area(soup) -> dict:
@@ -794,9 +797,14 @@ def _parse_info_area(soup) -> dict:
     divs, the score, the per-period pairs *including the period in progress*
     ("(1-2, 0-0)"), the state ("1st period ended", "2nd period", "Final
     Score") and then either the running clock of the current period ("01:28")
-    or the current powerplay ("Powerplay (5 on 4) for ÖHK (01:53)"). Sampled
-    live across five SHL games on 2026-09-24; overtime and shootout wording is
-    matched loosely because it was not seen that night.
+    or a note that ends with it ("Powerplay (5 on 4) for ÖHK (01:53)", "Time
+    out for RBK (12:10)", "VÄX pulled goalie (18:53)").
+
+    Vocabulary sampled once a minute across five SHL games on 2026-09-24,
+    including two that went to overtime: "1st period", "1st period ended",
+    "2nd period", "2nd period ended", "3rd period", "3rd period ended",
+    "Overtime", then "Game Finished" for 3-18 minutes before "Final Score".
+    No shootout was seen, so that wording is matched loosely.
     """
     out = {
         "state_text": None,
@@ -819,7 +827,7 @@ def _parse_info_area(soup) -> dict:
             out["state_text"] = text
             out["state_period"] = f"P{m.group(1)}"
             out["period_ended"] = bool(m.group(2))
-        elif "final" in low:
+        elif "final" in low or "finished" in low:
             out["state_text"] = text
             out["is_final"] = True
         elif "overtime" in low or low.startswith("ot"):
@@ -833,6 +841,10 @@ def _parse_info_area(soup) -> dict:
             out["period_pairs"] = text
         elif _CLOCK_RE.match(text) and out["live_clock"] is None:
             out["live_clock"] = text
+        elif out["live_clock"] is None and not low.startswith("spectators"):
+            m = _TRAILING_CLOCK_RE.search(text)
+            if m:
+                out["live_clock"] = m.group(1)
     return out
 
 
@@ -975,6 +987,10 @@ def _parse_game_events(html: str) -> dict:
             period_clock = info["live_clock"]
         elif event_period != current_period:
             period_clock = None
+    elif info["is_final"]:
+        # "Game Finished" / "Final Score": the schedule page may take a few
+        # minutes more to mark the game completed, so say so here.
+        period_clock = None
 
     # ── Classify events into goals / penalties ────────────────────────────
     goals, penalties = _classify_events(
@@ -1000,6 +1016,7 @@ def _parse_game_events(html: str) -> dict:
         "period": current_period,
         "period_clock": period_clock,
         "intermission": intermission,
+        "is_final": info["is_final"],
         "game_state": info["state_text"],
         "period_scores_live": _completed_pairs(info),
         "period_scores": [],
